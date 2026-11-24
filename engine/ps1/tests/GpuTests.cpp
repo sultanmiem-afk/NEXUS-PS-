@@ -770,5 +770,61 @@ int main() {
     gpu.writeGp0(0x020000FFu); gpu.writeGp0(920u | (410u << 16u)); gpu.writeGp0(1u | (1u << 16u));
     assert(vram.readPixel(920u,410u,pixel) && pixel==0x001Fu);
 
+
+    // CPU-to-VRAM and VRAM-to-CPU transfers wrap at both VRAM edges.
+    gpu.reset();
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(1023u | (511u << 16u));
+    gpu.writeGp0(2u | (2u << 16u));
+    gpu.writeGp0(0x22221111u);
+    gpu.writeGp0(0xA0004444u); // High half is the fourth pixel; poison-looking word is data.
+    assert(vram.readPixel(1023u,511u,pixel) && pixel==0x1111u);
+    assert(vram.readPixel(0u,511u,pixel) && pixel==0x2222u);
+    assert(vram.readPixel(1023u,0u,pixel) && pixel==0x4444u);
+    gpu.writeGp0(0xC0000000u);
+    gpu.writeGp0(1023u | (511u << 16u));
+    gpu.writeGp0(2u | (2u << 16u));
+    assert(gpu.readGp0()==0x22221111u);
+    assert(gpu.readGp0()==0x00004444u);
+
+    // Indexed 4-bit texture lookup uses CLUT X in 16-word units and CLUT Y.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    gpu.writeGp0(0xE1000000u); // 4-bit texture depth.
+    vram.writePixel(0u,0u,0x0001u); // Texel index 1.
+    vram.writePixel(17u,10u,0x03E0u); // CLUT base X=16, plus index 1.
+    gpu.writeGp0(0x6E000000u);
+    gpu.writeGp0(250u | (250u << 16u));
+    gpu.writeGp0((641u << 16u));
+    assert(vram.readPixel(250u,250u,pixel) && pixel==0x03E0u);
+
+    // Texture page X is selected by E1 for sprite commands.
+    gpu.writeGp0(0xE1000101u); // 15-bit depth, texture page X=64.
+    vram.writePixel(66u,3u,0x7C00u);
+    gpu.writeGp0(0x6E000000u);
+    gpu.writeGp0(260u | (260u << 16u));
+    gpu.writeGp0(2u | (3u << 8u));
+    assert(vram.readPixel(260u,260u,pixel) && pixel==0x7C00u);
+
+    // Polygon semi-transparency uses ABR from the packet texpage, not E1.
+    gpu.writeGp0(0xE1000100u); // E1 ABR=0; polygon texpage below requests ABR=2.
+    vram.writePixel(0u,0u,0x8003u);
+    vram.writePixel(275u,275u,10u);
+    gpu.writeGp0(0x27FFFFFFu); // Raw + semi-transparent textured triangle.
+    gpu.writeGp0(270u | (270u << 16u));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(290u | (270u << 16u));
+    gpu.writeGp0(0x01400000u); // 15-bit texpage with ABR=2 (B-F).
+    gpu.writeGp0(270u | (290u << 16u));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(275u,275u,pixel) && pixel==7u);
+
+    // GP1(01h) clears queued FIFO words as well as partial packet state.
+    gpu.enqueueGp0(0x020000FFu);
+    assert(gpu.gp0FifoSize()==1u);
+    gpu.writeGp1(0x01000000u);
+    assert(gpu.gp0FifoSize()==0u);
+
     return 0;
 }
