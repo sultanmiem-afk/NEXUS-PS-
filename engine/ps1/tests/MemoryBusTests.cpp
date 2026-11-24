@@ -67,6 +67,30 @@ int main() {
     word = 0xFFFFFFFFu;
     assert(bus.read32(0x1F801044u, word) && word == 0u);
 
+    // BIOS startup probes are benign across both physical and KSEG1 aliases.
+    const std::uint32_t benignAddresses[] = {
+        0x1F801004u, 0x1F801008u, 0x1F80100Cu, 0x1F801010u,
+        0x1F801014u, 0x1F801018u, 0x1F80101Cu, 0x1F801020u,
+        0x1F801040u, 0x1F801048u, 0x1F80104Au, 0x1F80104Eu,
+        0x1F80105Au, 0x1F801820u, 0x1F801824u, 0x1F802000u
+    };
+    for (const auto address : benignAddresses) {
+        for (const auto probe : {address, address + 0xA0000000u}) {
+            assert(bus.write32(probe, 0xA0000000u));
+            word = 0xFFFFFFFFu;
+            assert(bus.read32(probe, word) && word == 0u);
+        }
+    }
+    for (const auto address : {0x1F801004u, 0x1F801040u, 0x1F801048u,
+                               0x1F80104Au, 0x1F80104Eu, 0x1F80105Au,
+                               0x1F801820u, 0x1F801824u, 0x1F802000u}) {
+        const auto alias = address + 0xA0000000u;
+        std::uint8_t readByte = 0xFFu;
+        std::uint16_t readHalf = 0xFFFFu;
+        assert(bus.write8(alias, 0xA0u) && bus.read8(alias, readByte) && readByte == 0u);
+        assert(bus.write16(alias, 0xA000u) && bus.read16(alias, readHalf) && readHalf == 0u);
+    }
+
     // KSEG1 aliases of interrupt, DMA, timer and CD-ROM MMIO use physical decode.
     assert(bus.write32(0xBF801074u, 0x20u));
     assert(bus.read32(0x1F801074u, word) && word == 0x20u);
