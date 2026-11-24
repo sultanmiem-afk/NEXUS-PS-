@@ -12,7 +12,7 @@ It is not yet a complete emulator and cannot boot commercial games at this stage
 - Read-only 512 KiB BIOS ROM device; users supply their own BIOS image.
 - 1 MiB VRAM (1024 × 512, 16-bit pixels).
 - Initial GP0/GP1 GPU command processor:
-  - GP0(02h) VRAM fill rectangle.
+  - GP0(02h) VRAM fill rectangle.\n  - GP0(20h) flat-shaded triangle and GP0(28h) flat-shaded quad rasterization.\n  - Basic signed vertex coordinates, draw offset, and drawing-area clipping.
   - GP0(A0h) CPU-to-VRAM image transfer.
   - GP0(C0h) VRAM-to-CPU image readback.
   - GP0(E1h–E6h) draw-environment register storage.
@@ -22,10 +22,10 @@ It is not yet a complete emulator and cannot boot commercial games at this stage
 
 ## GPU limitations
 
-The GPU is only an early command-processing subset. Polygon and line rasterizers,
-textured and shaded primitives, blending, dithering, texture-window behavior,
-drawing-area clipping, mask semantics, display scanout, GPU timing/IRQ generation,
-and DMA integration are not implemented. GP0 command FIFO behavior and status
+The GPU is only an early command-processing subset. Line rasterization, textured and Gouraud-shaded primitives, blending, dithering,
+texture-window behavior, mask semantics, display scanout, GPU timing/IRQ generation,
+and DMA integration are not implemented. The current flat polygon rasterizer is
+an initial pixel-level implementation and still needs edge-rule/hardware validation. GP0 command FIFO behavior and status
 bits still need hardware-level validation. Passing the current tests does not
 mean commercial games are compatible.
 
