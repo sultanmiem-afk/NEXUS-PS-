@@ -459,5 +459,48 @@ int main() {
         ++consumed;
     }
     assert(consumed == expectedNext);
+
+    // Unsupported fixed-size GP0 packets consume their complete payload so
+    // their data words cannot become new command opcodes.
+    const std::uint8_t unsupportedOpcodes[] = {
+        0x22u, 0x2Au, 0x32u, 0x3Au, 0x34u, 0x3Cu, 0x42u, 0x80u
+    };
+    const std::size_t unsupportedLengths[] = {4u, 5u, 6u, 8u, 9u, 12u, 3u, 4u};
+    for (std::size_t command = 0; command < 8u; ++command) {
+        gpu.reset();
+        gpu.writeGp0(static_cast<std::uint32_t>(unsupportedOpcodes[command]) << 24u);
+        for (std::size_t word = 1u; word < unsupportedLengths[command]; ++word)
+            gpu.writeGp0(0x11111111u + static_cast<std::uint32_t>(word));
+        const std::uint32_t x = 900u + static_cast<std::uint32_t>(command) * 8u;
+        gpu.writeGp0(0x020000FFu);
+        gpu.writeGp0(x | (450u << 16u));
+        gpu.writeGp0(1u | (1u << 16u));
+        assert(vram.readPixel(x, 450u, pixel) && pixel == 0x001Fu);
+    }
+
+    // Flat and Gouraud poly-lines are variable-length and end at 0x50005000.
+    // Consume their vertices and terminator before accepting the next command.
+    gpu.reset();
+    gpu.writeGp0(0x480000FFu); // Unsupported flat polyline.
+    gpu.writeGp0(10u | (10u << 16u));
+    gpu.writeGp0(20u | (20u << 16u));
+    gpu.writeGp0(30u | (30u << 16u));
+    gpu.writeGp0(0x50005000u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(950u | (450u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(950u, 450u, pixel) && pixel == 0x001Fu);
+
+    gpu.reset();
+    gpu.writeGp0(0x4C0000FFu); // Unsupported Gouraud polyline.
+    gpu.writeGp0(10u | (10u << 16u));
+    gpu.writeGp0(0x0000FF00u);
+    gpu.writeGp0(20u | (20u << 16u));
+    gpu.writeGp0(0x00FF0000u);
+    gpu.writeGp0(0x50005000u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(960u | (450u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(960u, 450u, pixel) && pixel == 0x001Fu);
     return 0;
 }
