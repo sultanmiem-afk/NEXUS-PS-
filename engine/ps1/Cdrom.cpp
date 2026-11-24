@@ -1,6 +1,9 @@
 #include "Cdrom.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <iomanip>
+#include <sstream>
 
 namespace nexus::ps1 {
 namespace {
@@ -13,34 +16,139 @@ constexpr std::uint8_t kIrqError = 0x05u;
 }
 
 void Cdrom::reset() noexcept {
-    index_ = 0;
-    interruptEnable_ = 0;
-    interruptFlags_ = 0;
-    mode_ = 0;
-    request_ = 0;
-    currentLba_ = 0;
-    cycleRemainder_ = 0;
-    reading_ = false;
-    dataReady_ = false;
-    parameters_.clear();
-    responses_.clear();
-    data_.clear();
+    index_ = 0; interruptEnable_ = 0; interruptFlags_ = 0; mode_ = 0;
+    request_ = 0; currentLba_ = 0; cycleRemainder_ = 0;
+    reading_ = false; dataReady_ = false;
+    parameters_.clear(); responses_.clear(); data_.clear();
 }
 
 bool Cdrom::loadImage(const std::vector<std::uint8_t>& image) noexcept {
     if (image.empty()) return false;
     std::size_t sectorSize = 0;
-    if ((image.size() % kRawSectorSize) == 0u) sectorSize = kRawSectorSize;
-    else if ((image.size() % kCookedSectorSize) == 0u) sectorSize = kCookedSectorSize;
+    if (image.size() % kRawSectorSize == 0u) sectorSize = kRawSectorSize;
+    else if (image.size() % kCookedSectorSize == 0u) sectorSize = kCookedSectorSize;
     else return false;
     image_ = image;
-    sectorSize_ = sectorSize;
+    tracks_.clear();
+    Track track{};
+    track.sectorSize = sectorSize;
+    track.dataOffset = sectorSize == kRawSectorSize ? kRawUserDataOffset : 0u;
+    track.fileEndSector = static_cast<std::uint32_t>(image.size() / sectorSize);
+    tracks_.push_back(track);
+    cueLoaded_ = false;
+    reset();
+    return true;
+}
+
+bool Cdrom::loadCue(const std::string& cueText, const std::string& binFilename,
+                    const std::vector<std::uint8_t>& binImage) noexcept {
+    if (cueText.empty() || binFilename.empty() || binImage.empty()) return false;
+    std::string referencedFile;
+    std::vector<Track> parsedTracks;
+    std::istringstream input(cueText);
+    std::string line;
+    Track* currentTrack = nullptr;
+    std::uint32_t previousDiscStart = 0;
+    bool havePreviousTrack = false;
+    std::size_t detectedSectorSize = 0;
+
+    auto basename = [](std::string value) {
+        const std::size_t slash = value.find_last_of("/\\");
+        if (slash != std::string::npos) value = value.substr(slash + 1u);
+        std::transform(value.begin(), value.end(), value.begin(),
+            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return value;
+    };
+    auto parseMsf = [](const std::string& value, std::uint32_t& frames) {
+        unsigned minute = 0, second = 0, frame = 0;
+        char a = 0, b = 0;
+        std::istringstream msf(value);
+        if (!(msf >> minute >> a >> second >> b >> frame) ||
+            a != ':' || b != ':' || second >= 60u || frame >= 75u) return false;
+        frames = (minute * 60u + second) * 75u + frame;
+        return true;
+    };
+
+    while (std::getline(input, line)) {
+        std::istringstream row(line);
+        std::string token;
+        if (!(row >> token)) continue;
+        std::transform(token.begin(), token.end(), token.begin(),
+            [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+        if (token == "FILE") {
+            std::string filename;
+            if (!(row >> std::quoted(filename))) {
+                row.clear();
+                const std::size_t first = line.find_first_of(" \t");
+                if (first == std::string::npos) return false;
+                std::istringstream fallback(line.substr(first + 1u));
+                if (!(fallback >> filename)) return false;
+            }
+            if (!referencedFile.empty()) return false;
+            referencedFile = filename;
+        } else if (token == "TRACK") {
+            unsigned number = 0;
+            std::string format;
+            if (!(row >> number >> format) || number == 0u) return false;
+            std::transform(format.begin(), format.end(), format.begin(),
+                [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+            Track track{};
+            if (format == "MODE1/2048") {
+                track.sectorSize = 2048u; track.dataOffset = 0u;
+            } else if (format == "MODE1/2352") {
+                track.sectorSize = 2352u; track.dataOffset = 16u;
+            } else if (format == "MODE2/2352") {
+                track.sectorSize = 2352u; track.dataOffset = 24u;
+            } else return false;
+            if (detectedSectorSize != 0u && detectedSectorSize != track.sectorSize)
+                return false;
+            detectedSectorSize = track.sectorSize;
+            parsedTracks.push_back(track);
+            currentTrack = &parsedTracks.back();
+        } else if (token == "INDEX") {
+            unsigned indexNumber = 0;
+            std::string timestamp;
+            if (!(row >> indexNumber >> timestamp)) return false;
+            if (indexNumber != 1u) continue;
+            if (currentTrack == nullptr) return false;
+            if (!parseMsf(timestamp, currentTrack->fileStartSector)) return false;
+            currentTrack->discStartLba = currentTrack->fileStartSector >= 150u
+                ? currentTrack->fileStartSector - 150u : 0u;
+            if (havePreviousTrack && currentTrack->discStartLba <= previousDiscStart)
+                return false;
+            previousDiscStart = currentTrack->discStartLba;
+            havePreviousTrack = true;
+        }
+    }
+
+    if (referencedFile.empty() || parsedTracks.empty() ||
+        basename(referencedFile) != basename(binFilename)) return false;
+    if (detectedSectorSize == 0u || binImage.size() % detectedSectorSize != 0u)
+        return false;
+    const std::uint32_t totalSectors =
+        static_cast<std::uint32_t>(binImage.size() / detectedSectorSize);
+    for (std::size_t i = 0; i < parsedTracks.size(); ++i) {
+        Track& track = parsedTracks[i];
+        if (track.fileStartSector >= totalSectors) return false;
+        track.fileEndSector = totalSectors;
+        if (i + 1u < parsedTracks.size()) {
+            const std::uint32_t nextStart = parsedTracks[i + 1u].fileStartSector;
+            if (nextStart <= track.fileStartSector) return false;
+            track.fileEndSector = nextStart;
+        }
+    }
+    image_ = binImage;
+    tracks_ = std::move(parsedTracks);
+    cueLoaded_ = true;
     reset();
     return true;
 }
 
 std::size_t Cdrom::sectorCount() const noexcept {
-    return sectorSize_ == 0u ? 0u : image_.size() / sectorSize_;
+    if (tracks_.empty()) return 0u;
+    const Track& last = tracks_.back();
+    return static_cast<std::size_t>(last.discStartLba) +
+        (last.fileEndSector - last.fileStartSector);
 }
 
 bool Cdrom::irqPending() const noexcept {
@@ -61,12 +169,23 @@ std::uint8_t Cdrom::fromBcd(std::uint8_t value) noexcept {
 }
 
 bool Cdrom::readSector(std::uint32_t lba, std::vector<std::uint8_t>& output) const {
-    if (!imageLoaded() || lba >= sectorCount()) return false;
-    const std::size_t offset = static_cast<std::size_t>(lba) * sectorSize_;
-    const std::size_t dataOffset = sectorSize_ == kRawSectorSize ? kRawUserDataOffset : 0u;
-    if (offset + dataOffset + kCookedSectorSize > image_.size()) return false;
-    output.assign(image_.begin() + static_cast<std::ptrdiff_t>(offset + dataOffset),
-                  image_.begin() + static_cast<std::ptrdiff_t>(offset + dataOffset + kCookedSectorSize));
+    if (!imageLoaded()) return false;
+    const Track* selected = nullptr;
+    for (const Track& track : tracks_) {
+        const std::uint32_t count = track.fileEndSector - track.fileStartSector;
+        if (lba >= track.discStartLba && lba < track.discStartLba + count) {
+            selected = &track;
+            break;
+        }
+    }
+    if (selected == nullptr) return false;
+    const std::uint32_t fileSector = selected->fileStartSector +
+        (lba - selected->discStartLba);
+    const std::size_t offset = static_cast<std::size_t>(fileSector) * selected->sectorSize;
+    if (offset + selected->dataOffset + selected->userDataSize > image_.size()) return false;
+    output.assign(image_.begin() + static_cast<std::ptrdiff_t>(offset + selected->dataOffset),
+                  image_.begin() + static_cast<std::ptrdiff_t>(
+                      offset + selected->dataOffset + selected->userDataSize));
     return true;
 }
 
