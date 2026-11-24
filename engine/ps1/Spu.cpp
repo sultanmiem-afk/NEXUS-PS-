@@ -25,6 +25,11 @@ void Spu::reset() noexcept {
     adpcmHistory1_.fill(0);
     adpcmHistory2_.fill(0);
     adsrRateCounters_.fill(0);
+    outputQueue_.fill(StereoSample{});
+    outputRead_ = outputWrite_ = outputCount_ = 0;
+    reverbDelayLeft_.fill(0);
+    reverbDelayRight_.fill(0);
+    reverbPosition_ = 0;
     keyOnMask_ = 0;
     keyOffMask_ = 0;
 }
@@ -307,6 +312,79 @@ bool Spu::advanceAdsr(std::size_t index, std::uint32_t sampleTicks) noexcept {
     }
     return voice.adsrPhase != AdsrPhase::Off;
 }
+
+std::int16_t Spu::clampSample(std::int64_t value) noexcept {
+    if (value > 32767) value = 32767;
+    if (value < -32768) value = -32768;
+    return static_cast<std::int16_t>(value);
+}
+
+Spu::StereoSample Spu::mixSample() noexcept {
+    std::int64_t left = 0;
+    std::int64_t right = 0;
+    constexpr std::int64_t kFullScale = 32767;
+
+    for (std::size_t i = 0; i < kVoiceCount; ++i) {
+        VoiceState& voice = voices_[i];
+        if (voice.adsrPhase == AdsrPhase::Off) continue;
+
+        (void)advanceAdsr(i, 1u);
+        if (voice.adsrPhase == AdsrPhase::Off) continue;
+
+        std::int16_t decoded = 0;
+        if (!nextVoiceSample(i, decoded)) continue;
+
+        const std::int64_t envelope = voice.currentAdsrVolume;
+        const std::int64_t voiceLeft = voice.volumeLeft & 0x7FFFu;
+        const std::int64_t voiceRight = voice.volumeRight & 0x7FFFu;
+        const std::int64_t enveloped = static_cast<std::int64_t>(decoded) * envelope / kFullScale;
+        left += enveloped * voiceLeft / kFullScale;
+        right += enveloped * voiceRight / kFullScale;
+    }
+
+    const std::int64_t masterLeft = registers_[0x180u / 2u] & 0x7FFFu;
+    const std::int64_t masterRight = registers_[0x182u / 2u] & 0x7FFFu;
+    left = left * masterLeft / kFullScale;
+    right = right * masterRight / kFullScale;
+
+    // Approximate feedback delay reverb. Bit 7 of the simplified SPU control
+    // register enables a short stereo delay; this is not the PS1 reverb algorithm.
+    if ((registers_[0x1A8u / 2u] & 0x0080u) != 0u) {
+        const std::int64_t wetLeft = reverbDelayLeft_[reverbPosition_];
+        const std::int64_t wetRight = reverbDelayRight_[reverbPosition_];
+        left += wetLeft / 4;
+        right += wetRight / 4;
+        reverbDelayLeft_[reverbPosition_] = static_cast<std::int32_t>(
+            std::clamp<std::int64_t>(left + wetLeft / 2, -65536, 65535));
+        reverbDelayRight_[reverbPosition_] = static_cast<std::int32_t>(
+            std::clamp<std::int64_t>(right + wetRight / 2, -65536, 65535));
+        reverbPosition_ = (reverbPosition_ + 1u) % reverbDelayLeft_.size();
+    } else {
+        reverbDelayLeft_.fill(0);
+        reverbDelayRight_.fill(0);
+        reverbPosition_ = 0;
+    }
+
+    const StereoSample mixed{clampSample(left), clampSample(right)};
+    if (outputCount_ == kOutputQueueSize) {
+        outputRead_ = (outputRead_ + 1u) % kOutputQueueSize;
+        --outputCount_;
+    }
+    outputQueue_[outputWrite_] = mixed;
+    outputWrite_ = (outputWrite_ + 1u) % kOutputQueueSize;
+    ++outputCount_;
+    return mixed;
+}
+
+bool Spu::popOutputSample(StereoSample& sample) noexcept {
+    if (outputCount_ == 0u) return false;
+    sample = outputQueue_[outputRead_];
+    outputRead_ = (outputRead_ + 1u) % kOutputQueueSize;
+    --outputCount_;
+    return true;
+}
+
+std::size_t Spu::queuedOutputSamples() const noexcept { return outputCount_; }
 
 bool Spu::readRegister16(std::uint32_t offset, std::uint16_t& value) const noexcept {
     if (!isMappedRegister(offset)) return false;
