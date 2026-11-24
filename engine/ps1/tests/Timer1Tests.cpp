@@ -27,9 +27,11 @@ int main() {
 
     // Sync mode currently pauses the simplified model.
     assert(timer.write32(Timer1::kModeAddress, 1u));
+    timer.setVBlankActive(true);
     assert(!timer.advance(10u));
     assert(!timer.advanceHBlankPulses(10u));
     assert(timer.counter() == 0u);
+    timer.setVBlankActive(false);
 
     assert(!timer.read32(0x1F80111Cu, value));
 
@@ -50,6 +52,38 @@ int main() {
     assert(timer.advance(1u));
     assert(timer.counter() == 0u);
     assert((timer.mode() & (1u << 11)) != 0u);
+
+    // Sync mode 1 resets at VBlank and then counts continuously.
+    assert(timer.write32(Timer1::kModeAddress, 1u | (1u << 1)));
+    timer.setVBlankActive(false);
+    assert(!timer.advance(3u));
+    assert(timer.counter() == 3u);
+    timer.setVBlankActive(true);
+    assert(timer.counter() == 0u);
+    assert(!timer.advance(2u));
+    assert(timer.counter() == 2u);
+
+    // Sync mode 2 counts only during VBlank.
+    timer.setVBlankActive(false);
+    assert(timer.write32(Timer1::kModeAddress, 1u | (2u << 1)));
+    assert(!timer.advance(4u));
+    assert(timer.counter() == 0u);
+    timer.setVBlankActive(true);
+    assert(!timer.advance(2u));
+    assert(timer.counter() == 2u);
+    timer.setVBlankActive(false);
+    assert(!timer.advance(4u));
+    assert(timer.counter() == 2u);
+
+    // Sync mode 3 waits for VBlank once, then free-runs.
+    assert(timer.write32(Timer1::kModeAddress, 1u | (3u << 1)));
+    timer.setVBlankActive(false);
+    assert(!timer.advance(5u));
+    assert(timer.counter() == 0u);
+    timer.setVBlankActive(true);
+    timer.setVBlankActive(false);
+    assert(!timer.advance(5u));
+    assert(timer.counter() == 5u);
 
     return 0;
 }
