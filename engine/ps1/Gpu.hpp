@@ -86,6 +86,7 @@ private:
     GpuFifo gp0Fifo_;
     std::vector<std::uint32_t> packet_;
     std::size_t expectedWords_ = 0;
+    bool variablePolyline_ = false;
     TransferMode transferMode_ = TransferMode::None;
     std::uint32_t transferX_ = 0;
     std::uint32_t transferY_ = 0;
