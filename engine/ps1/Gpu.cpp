@@ -764,7 +764,7 @@ void Gpu::executeFlatLine() noexcept {
              signExtend11(packet_[1] >> 16) + offsetY,
              signExtend11(packet_[2]) + offsetX,
              signExtend11(packet_[2] >> 16) + offsetY,
-             color, (opcode & 1u) != 0u);
+             color, (opcode & 2u) != 0u);
 }
 
 void Gpu::writeDrawPixel(int x, int y, std::uint16_t source,
@@ -818,7 +818,7 @@ void Gpu::drawLine(int x0, int y0, int x1, int y1,
 
 void Gpu::executeGouraudLine() noexcept {
     const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
-    const bool semiTransparent = (opcode & 1u) != 0u;
+    const bool semiTransparent = (opcode & 2u) != 0u;
     const int ox = signExtend11(drawOffset_ & 0x7FFu);
     const int oy = signExtend11((drawOffset_ >> 11) & 0x7FFu);
     int x = signExtend11(packet_[1]) + ox;
