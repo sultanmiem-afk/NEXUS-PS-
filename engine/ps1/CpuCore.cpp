@@ -67,7 +67,7 @@ CpuStepResult CpuCore::step() {
 
     auto load_address = [&](std::uint32_t address, std::uint32_t& value) -> bool {
         if ((address & 3u) != 0) {
-            result.status = CpuStepStatus::AddressError;
+            raise_exception(CpuException::AddressLoad, address);
             return false;
         }
         if (!bus_.read32(address, value)) {
@@ -215,7 +215,7 @@ CpuStepResult CpuCore::step() {
     case 0x21: { // LH
         const auto a = rs + static_cast<std::uint32_t>(imm);
         std::uint16_t v = 0;
-        if (a & 1u) result.status = CpuStepStatus::AddressError;
+        if (a & 1u) raise_exception(CpuException::AddressLoad, a);
         else if (bus_.read16(a, v)) write_reg(ins.rt(), sign_extend16(v));
         else result.status = CpuStepStatus::BusFault;
         break;
@@ -225,7 +225,7 @@ CpuStepResult CpuCore::step() {
     case 0x25: { const auto a = rs + static_cast<std::uint32_t>(imm); std::uint16_t v = 0; if (a & 1u) result.status = CpuStepStatus::AddressError; else if (bus_.read16(a, v)) write_reg(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LHU
     case 0x28: if (!bus_.write8(rs + static_cast<std::uint32_t>(imm), static_cast<std::uint8_t>(rt))) result.status = CpuStepStatus::BusFault; break;
     case 0x29: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 1u) result.status = CpuStepStatus::AddressError; else if (!bus_.write16(a, static_cast<std::uint16_t>(rt))) result.status = CpuStepStatus::BusFault; break; }
-    case 0x2B: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 3u) result.status = CpuStepStatus::AddressError; else if (!bus_.write32(a, rt)) result.status = CpuStepStatus::BusFault; break; }
+    case 0x2B: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 3u) raise_exception(CpuException::AddressStore, a); else if (!bus_.write32(a, rt)) result.status = CpuStepStatus::BusFault; break; }
     default:
         raise_exception(CpuException::ReservedInstruction);
         break;
