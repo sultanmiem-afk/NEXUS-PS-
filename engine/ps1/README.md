@@ -38,3 +38,8 @@ mean commercial games are compatible.
 5. Continue CPU timing, CD-ROM, SPU, timers, and interrupt-controller work.
 
 No BIOS or game images are included.
+
+
+### Additional GPU rasterization
+
+The current experimental GPU subset also accepts GP0(40h) flat-line packets and rasterizes them into VRAM with drawing-area clipping and drawing offsets. This remains a small command subset: it is not yet cycle-accurate, does not implement Gouraud shading or textured polygons, and has no GPU DMA/display scanout integration.
