@@ -186,14 +186,13 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
             return;
         }
         if (opcode == 0x02) expectedWords_ = 3;
-        else if (opcode == 0x20 || opcode == 0x21 || opcode == 0x22 || opcode == 0x23) expectedWords_ = 4;
-        else if (opcode >= 0x24 && opcode <= 0x27) expectedWords_ = 7;
-        else if (opcode == 0x28 || opcode == 0x2A) expectedWords_ = 5;
-        else if (opcode >= 0x2C && opcode <= 0x2F) expectedWords_ = 9;
-        else if (opcode == 0x30 || opcode == 0x32) expectedWords_ = 6;
-        else if (opcode == 0x34 || opcode == 0x35 || opcode == 0x36 || opcode == 0x37) expectedWords_ = 9;
-        else if (opcode == 0x38 || opcode == 0x3A) expectedWords_ = 8;
-        else if (opcode == 0x3C || opcode == 0x3D || opcode == 0x3E || opcode == 0x3F) expectedWords_ = 12;
+        else if (opcode >= 0x20 && opcode <= 0x3F) {
+            const bool gouraud = (opcode & 0x10u) != 0u;
+            const bool textured = (opcode & 0x04u) != 0u;
+            const std::size_t vertices = (opcode & 0x08u) != 0u ? 4u : 3u;
+            expectedWords_ = 1u + vertices * (1u + (textured ? 1u : 0u)) +
+                             (gouraud ? vertices - 1u : 0u);
+        }
         else if (opcode >= 0x40 && opcode <= 0x47) expectedWords_ = 3;
         else if (opcode >= 0x50 && opcode <= 0x57) expectedWords_ = 4;
         else if ((opcode >= 0x48 && opcode <= 0x4F) ||
@@ -216,13 +215,7 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
             ++unsupportedCommandCount_;
             return;
         }
-        if (opcode == 0x21 || opcode == 0x22 || opcode == 0x23 ||
-            opcode == 0x2A || opcode == 0x32 || opcode == 0x3A ||
-            opcode == 0x34 || opcode == 0x35 || opcode == 0x36 ||
-            opcode == 0x37 || opcode == 0x3C || opcode == 0x3D ||
-            opcode == 0x3E || opcode == 0x3F || opcode == 0x80) {
-            ++unsupportedCommandCount_;
-        }
+        if (opcode == 0x80) ++unsupportedCommandCount_;
     }
 
     packet_.push_back(value);
@@ -310,12 +303,10 @@ void Gpu::executePacket() {
     const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
     if (opcode == 0x02) {
         executeFillRectangle();
-    } else if (opcode == 0x20 || opcode == 0x28) {
-        executeFlatPolygon();
-    } else if ((opcode >= 0x24 && opcode <= 0x27) || (opcode >= 0x2C && opcode <= 0x2F)) {
-        executeTexturedPolygon();
-    } else if (opcode == 0x30 || opcode == 0x38) {
-        executeGouraudPolygon();
+    } else if (opcode >= 0x20 && opcode <= 0x3F) {
+        if ((opcode & 0x04u) != 0u) executeTexturedPolygon();
+        else if ((opcode & 0x10u) != 0u) executeGouraudPolygon();
+        else executeFlatPolygon();
     } else if (opcode >= 0x40 && opcode <= 0x47) {
         executeFlatLine();
     } else if (opcode >= 0x50 && opcode <= 0x57) {
@@ -400,20 +391,23 @@ void Gpu::executeFlatPolygon() noexcept {
     const int offsetY = signExtend11((drawOffset_ >> 11) & 0x7FFu);
     int x[4]{};
     int y[4]{};
-    const int vertices = packet_[0] >> 24 == 0x28 ? 4 : 3;
+    const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
+    const int vertices = (opcode & 0x08u) != 0u ? 4 : 3;
+    const bool semiTransparent = (opcode & 0x02u) != 0u;
     for (int i = 0; i < vertices; ++i) {
         const std::uint32_t packed = packet_[static_cast<std::size_t>(i) + 1];
         x[i] = signExtend11(packed) + offsetX;
         y[i] = signExtend11(packed >> 16) + offsetY;
     }
-    drawTriangle(x[0], y[0], x[1], y[1], x[2], y[2], color);
+    drawTriangle(x[0], y[0], x[1], y[1], x[2], y[2], color, semiTransparent);
     if (vertices == 4) {
-        drawTriangle(x[1], y[1], x[2], y[2], x[3], y[3], color);
+        drawTriangle(x[1], y[1], x[2], y[2], x[3], y[3], color, semiTransparent);
     }
 }
 
 void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
-                       int x2, int y2, std::uint32_t rgb) noexcept {
+                       int x2, int y2, std::uint32_t rgb,
+                       bool semiTransparent) noexcept {
     const long long area = edgeFunction(x0, y0, x1, y1, x2, y2);
     if (area == 0) return;
 
@@ -441,8 +435,7 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
                 const std::uint16_t color = (drawMode_ & (1u << 9)) != 0
                     ? ditheredColor24To15(rgb, px, py)
                     : static_cast<std::uint16_t>(color24To15(rgb));
-                vram_.writePixel(static_cast<std::uint32_t>(px),
-                                 static_cast<std::uint32_t>(py), color);
+                writeDrawPixel(px, py, color, semiTransparent);
             }
         }
     }
@@ -453,38 +446,46 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
 
 void Gpu::executeTexturedPolygon() noexcept {
     const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
-    const bool quad = opcode >= 0x2C && opcode <= 0x2F;
-    const bool rawTexture = (opcode & 0x02u) != 0;
-    const bool semiTransparent = (opcode & 0x01u) != 0;
+    const bool quad = (opcode & 0x08u) != 0u;
+    const bool gouraud = (opcode & 0x10u) != 0u;
+    const bool rawTexture = (opcode & 0x01u) != 0u;
+    const bool semiTransparent = (opcode & 0x02u) != 0u;
     const int count = quad ? 4 : 3;
     int x[4]{}, y[4]{}, u[4]{}, v[4]{};
+    std::uint32_t colors[4]{};
     std::uint16_t page = 0;
     const int ox = signExtend11(drawOffset_ & 0x7FFu);
     const int oy = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    std::size_t cursor = 0;
+    colors[0] = packet_[0];
     for (int i = 0; i < count; ++i) {
-        const std::size_t xyIndex = 1u + static_cast<std::size_t>(i) * 2u;
-        const std::size_t uvIndex = xyIndex + 1u;
-        const std::uint32_t xy = packet_[xyIndex];
-        const std::uint32_t uv = packet_[uvIndex];
+        if (i != 0 && gouraud) colors[i] = packet_[++cursor];
+        const std::uint32_t xy = packet_[++cursor];
+        const std::uint32_t uv = packet_[++cursor];
         x[i] = signExtend11(xy) + ox;
         y[i] = signExtend11(xy >> 16) + oy;
         u[i] = static_cast<int>(uv & 0xFFu);
         v[i] = static_cast<int>((uv >> 8) & 0xFFu);
         if (i == 1) page = static_cast<std::uint16_t>(uv >> 16);
     }
-    drawTexturedTriangle(x, y, u, v, page, rawTexture, semiTransparent);
+    const std::uint32_t c0[3] = {colors[0], colors[1], colors[2]};
+    drawTexturedTriangle(x, y, u, v, page, rawTexture, semiTransparent,
+                         gouraud ? c0 : nullptr);
     if (quad) {
         const int x2[3] = {x[1], x[2], x[3]};
         const int y2[3] = {y[1], y[2], y[3]};
         const int u2[3] = {u[1], u[2], u[3]};
         const int v2[3] = {v[1], v[2], v[3]};
-        drawTexturedTriangle(x2, y2, u2, v2, page, rawTexture, semiTransparent);
+        const std::uint32_t c1[3] = {colors[1], colors[2], colors[3]};
+        drawTexturedTriangle(x2, y2, u2, v2, page, rawTexture, semiTransparent,
+                             gouraud ? c1 : nullptr);
     }
 }
 
 void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                                const int u[3], const int v[3],
-                               std::uint16_t page, bool rawTexture, bool semiTransparent) noexcept {
+                               std::uint16_t page, bool rawTexture, bool semiTransparent,
+                               const std::uint32_t colors[3]) noexcept {
     const unsigned depth = (page >> 7) & 3u;
     if (depth == 3u) {
         ++unsupportedCommandCount_;
@@ -548,7 +549,20 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
         if (texel != 0) {
             const bool texelStp = (texel & 0x8000u) != 0;
             if (!rawTexture) {
-                const std::uint32_t modulation = packet_[0];
+                std::uint32_t modulation = packet_[0];
+                if (colors != nullptr) {
+                    const std::uint64_t den = static_cast<std::uint64_t>(area > 0 ? area : -area);
+                    modulation = 0;
+                    for (unsigned ch = 0; ch < 3; ++ch) {
+                        const std::uint64_t a = (colors[0] >> (ch * 8u)) & 0xFFu;
+                        const std::uint64_t b = (colors[1] >> (ch * 8u)) & 0xFFu;
+                        const std::uint64_t c = (colors[2] >> (ch * 8u)) & 0xFFu;
+                        const std::uint64_t value = (a * static_cast<std::uint64_t>(w0) +
+                            b * static_cast<std::uint64_t>(w1) +
+                            c * static_cast<std::uint64_t>(w2)) / den;
+                        modulation |= static_cast<std::uint32_t>(value) << (ch * 8u);
+                    }
+                }
                 const std::uint32_t tr = texel & 31u;
                 const std::uint32_t tg = (texel >> 5) & 31u;
                 const std::uint32_t tb = (texel >> 10) & 31u;
@@ -573,7 +587,7 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                     switch (mode) {
                     case 0: return (source + dest) >> 1;
                     case 1: return std::min(31u, source + dest);
-                    case 2: return source > dest ? source - dest : 0u;
+                    case 2: return dest > source ? dest - source : 0u;
                     default: return std::min(31u, dest + (source >> 2));
                     }
                 };
@@ -586,7 +600,9 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
 }
 
 void Gpu::executeGouraudPolygon() noexcept {
-    const bool quad = static_cast<std::uint8_t>(packet_[0] >> 24) == 0x38;
+    const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
+    const bool quad = (opcode & 0x08u) != 0u;
+    const bool semiTransparent = (opcode & 0x02u) != 0u;
     const int vertexCount = quad ? 4 : 3;
     int x[4]{};
     int y[4]{};
@@ -602,17 +618,17 @@ void Gpu::executeGouraudPolygon() noexcept {
     }
     drawGouraudTriangle(x[0], y[0], colors[0],
                         x[1], y[1], colors[1],
-                        x[2], y[2], colors[2]);
+                        x[2], y[2], colors[2], semiTransparent);
     if (quad) {
         drawGouraudTriangle(x[1], y[1], colors[1],
                             x[2], y[2], colors[2],
-                            x[3], y[3], colors[3]);
+                            x[3], y[3], colors[3], semiTransparent);
     }
 }
 
 void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
                               int x1, int y1, std::uint32_t c1,
-                              int x2, int y2, std::uint32_t c2) noexcept {
+                              int x2, int y2, std::uint32_t c2, bool semiTransparent) noexcept {
     const long long area = edgeFunction(x0, y0, x1, y1, x2, y2);
     if (area == 0) return;
     const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
@@ -651,8 +667,7 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
             const std::uint16_t output = (drawMode_ & (1u << 9)) != 0
                 ? ditheredColor24To15(rgb, px, py)
                 : static_cast<std::uint16_t>(color24To15(rgb));
-            vram_.writePixel(static_cast<std::uint32_t>(px),
-                             static_cast<std::uint32_t>(py), output);
+            writeDrawPixel(px, py, output, semiTransparent);
         }
     }
 }
@@ -704,7 +719,7 @@ void Gpu::executeRectangle() noexcept {
                     switch (blendMode) {
                     case 0: return (s + d) >> 1;
                     case 1: return std::min(31u, s + d);
-                    case 2: return s > d ? s - d : 0u;
+                    case 2: return d > s ? d - s : 0u;
                     default: return std::min(31u, d + (s >> 2));
                     }
                 };
@@ -764,7 +779,7 @@ void Gpu::executeTexturedRectangle() noexcept {
         switch (blendMode) {
         case 0: return (s + d) >> 1;
         case 1: return std::min(31u, s + d);
-        case 2: return s > d ? s - d : 0u;
+        case 2: return d > s ? d - s : 0u;
         default: return std::min(31u, d + (s >> 2));
         }
     };
@@ -840,7 +855,7 @@ void Gpu::writeDrawPixel(int x, int y, std::uint16_t source,
             switch (mode) {
                 case 0: return (s + d) >> 1;
                 case 1: return std::min(31u, s + d);
-                case 2: return s > d ? s - d : 0u;
+                case 2: return d > s ? d - s : 0u;
                 default: return std::min(31u, d + (s >> 2));
             }
         };
