@@ -44,7 +44,7 @@ int main() {
 
     // Toggle IRQ output: only the active (high-to-low) transition interrupts.
     assert(timer.write32(Timer2::kTargetAddress, 1u));
-    assert(timer.write32(Timer2::kModeAddress, (1u << 4) | (1u << 6) | (1u << 7)));
+    assert(timer.write32(Timer2::kModeAddress, (1u << 3) | (1u << 4) | (1u << 6) | (1u << 7)));
     assert(timer.advance(1u));
     assert((timer.mode() & (1u << 10)) == 0u);
     assert(!timer.advance(1u));
