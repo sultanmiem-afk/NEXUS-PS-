@@ -702,7 +702,7 @@ int main() {
     gpu.writeGp0(160u | (160u << 16u));
     assert(vram.readPixel(175u,175u,pixel) && pixel==0x03E0u);
     // Textured sprite in 15-bit mode; raw-texture flag is bit 0.
-    vram.writePixel(300u,200u,0x7C00u);
+    vram.writePixel(0u,0u,0x7C00u);
     gpu.writeGp0(0xE1000100u); // 15-bit page 0, ABR=0.
     gpu.writeGp0(0x65000000u);
     gpu.writeGp0(200u | (200u << 16u));
