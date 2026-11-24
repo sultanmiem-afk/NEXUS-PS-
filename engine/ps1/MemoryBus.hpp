@@ -8,6 +8,7 @@
 #include "Scratchpad.hpp"
 #include "Timer0.hpp"
 #include "Timer1.hpp"
+#include "Timer2.hpp"
 
 namespace nexus::ps1 {
 
@@ -27,6 +28,8 @@ public:
     const Timer0& timer0() const noexcept { return timer0_; }
     Timer1& timer1() noexcept { return timer1_; }
     const Timer1& timer1() const noexcept { return timer1_; }
+    Timer2& timer2() noexcept { return timer2_; }
+    const Timer2& timer2() const noexcept { return timer2_; }
     InterruptController& interrupts() noexcept { return interrupts_; }
     const InterruptController& interrupts() const noexcept { return interrupts_; }
     BiosRom& bios() noexcept { return bios_; }
@@ -49,6 +52,7 @@ private:
     InterruptController interrupts_{};
     Timer0 timer0_{};
     Timer1 timer1_{};
+    Timer2 timer2_{};
 };
 
 } // namespace nexus::ps1
