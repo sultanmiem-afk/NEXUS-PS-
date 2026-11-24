@@ -39,7 +39,8 @@ bool MemoryBus::write16(std::uint32_t address, std::uint16_t value) {
 
 bool MemoryBus::write32(std::uint32_t address, std::uint32_t value) {
     if (ram_.write32(address, value)) return true;
-    return scratchpad_.write32(address, value);
+    if (scratchpad_.write32(address, value)) return true;
+    return dma_.write32(address, value);
 }
 
 } // namespace nexus::ps1
