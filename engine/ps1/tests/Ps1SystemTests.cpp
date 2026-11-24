@@ -64,10 +64,28 @@ int main() {
     putWord(system.memory().ram(), 40, 0x34070033u);
     putWord(system.memory().ram(), 44, iType(0x29u, 6u, 7u, 0u)); // SH target
     putWord(system.memory().ram(), 48, iType(0x25u, 6u, 8u, 0u)); // LHU target
-    for (int i = 0; i < 13; ++i) assert(system.step().cpu.status == CpuStepStatus::Executed);
+    putWord(system.memory().ram(), 52, 0x00000000u); // NOP commits delayed LHU result
+    for (int i = 0; i < 14; ++i) assert(system.step().cpu.status == CpuStepStatus::Executed);
     assert(system.cpu().state().gpr[2] == (1u << 4));
     assert(system.cpu().state().gpr[5] == (1u << 4));
     assert(system.cpu().state().gpr[8] == 0x33u);
+    // I_STAT halfword writes preserve ones and clear zeroes (write-zero-to-clear).
+    assert(system.memory().write16(InterruptController::kStatusAddress, 0xFFFFu));
+    assert((system.memory().interrupts().status() & (1u << 4)) != 0u);
+    assert(system.memory().write16(InterruptController::kStatusAddress, 0u));
+    assert((system.memory().interrupts().status() & (1u << 4)) == 0u);
+    // All timer banks accept 16-bit counter/mode/target accesses.
+    assert(system.memory().write16(Timer0::kCounterAddress, 0x11u));
+    assert(system.memory().write16(Timer1::kCounterAddress, 0x22u));
+    assert(system.memory().write16(Timer2::kCounterAddress, 0x33u));
+    std::uint16_t timerValue = 0;
+    assert(system.memory().read16(Timer0::kCounterAddress, timerValue) && timerValue == 0x11u);
+    assert(system.memory().read16(Timer1::kCounterAddress, timerValue) && timerValue == 0x22u);
+    assert(system.memory().read16(Timer2::kCounterAddress, timerValue) && timerValue == 0x33u);
+    assert(system.memory().write16(Timer1::kTargetAddress, 0x44u));
+    assert(system.memory().read16(Timer1::kTargetAddress, timerValue) && timerValue == 0x44u);
+    assert(system.memory().write16(Timer2::kTargetAddress, 0x55u));
+    assert(system.memory().read16(Timer2::kTargetAddress, timerValue) && timerValue == 0x55u);
 
     // CP0 reset enables BEV; exceptions use the bootstrap vector until software clears it.
     system.reset(0x00000000u);
