@@ -34,6 +34,21 @@ int main() {
     gpu.writeGp0(220u | (220u << 16));
     assert(vram.readPixel(205, 205, pixel) && pixel == 0x03E0u);
 
+    // Flat polygons retain 24-bit color until rasterization so GP0(E1)
+    // dithering is applied before RGB555 quantization.
+    gpu.writeGp0(0xE1000000u);
+    gpu.writeGp0(0x20808080u);
+    gpu.writeGp0(250u | (250u << 16));
+    gpu.writeGp0(270u | (250u << 16));
+    gpu.writeGp0(250u | (270u << 16));
+    assert(vram.readPixel(255u, 255u, pixel) && pixel == 0x4210u);
+
+    gpu.writeGp0(0xE1000200u);
+    gpu.writeGp0(0x20808080u);
+    gpu.writeGp0(250u | (250u << 16));
+    gpu.writeGp0(270u | (250u << 16));
+    gpu.writeGp0(250u | (270u << 16));
+    assert(vram.readPixel(255u, 255u, pixel) && pixel == 0x3DEFu);
 
     // Gouraud-shaded triangle: red, green, and blue vertex colors interpolate.
     gpu.writeGp0(0x300000FFu);
