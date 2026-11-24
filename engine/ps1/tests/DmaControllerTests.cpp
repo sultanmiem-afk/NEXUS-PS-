@@ -85,6 +85,39 @@ int main() {
     assert(dma.lastTransferWords() == 3u);
     assert(dma.base(2) == 0x00FFFFFFu);
 
+
+    // Simple multi-word data round-trip: RAM -> GPU VRAM -> RAM.
+    const std::uint32_t testWords[] = {
+        0x12345678u, 0x9ABCDEF0u, 0x0F1E2D3Cu, 0xA5B6C7D8u
+    };
+    for (std::uint32_t i = 0; i < 4u; ++i) {
+        assert(ram.write32(0x400u + i * 4u, testWords[i]));
+    }
+
+    // Prepare an 8-pixel VRAM upload (four 32-bit words).
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(0x00000000u);
+    gpu.writeGp0(0x00010008u);
+    assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x400u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 4u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000001u));
+    assert(dma.executeGpuTransfer(ram, gpu));
+    assert(dma.lastTransferWords() == 4u);
+
+    // Read the same eight pixels back into a different RAM location.
+    gpu.writeGp0(0xC0000000u);
+    gpu.writeGp0(0x00000000u);
+    gpu.writeGp0(0x00010008u);
+    assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x500u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 4u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000000u));
+    assert(dma.executeGpuTransfer(ram, gpu));
+    assert(dma.lastTransferWords() == 4u);
+    for (std::uint32_t i = 0; i < 4u; ++i) {
+        assert(ram.read32(0x500u + i * 4u, value));
+        assert(value == testWords[i]);
+    }
+
     dma.reset();
     assert(dma.read32(DmaController::kDpcrAddress, value) && value == 0x07654321u);
     assert(dma.read32(DmaController::kBaseAddress, value) && value == 0u);
