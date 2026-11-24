@@ -36,6 +36,7 @@ public:
                          std::uint32_t fault_pc, bool in_delay_slot,
                          std::uint32_t bad_vaddr = 0) noexcept;
     void return_from_exception() noexcept;
+    void setHardwareInterruptPending(bool pending) noexcept;
 
 private:
     std::array<std::uint32_t, 16> regs_{};
