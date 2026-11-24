@@ -11,6 +11,7 @@ add_library(nexus_ps1_cpu
     Vram.cpp
     Gpu.cpp
     MemoryBus.cpp
+    DmaController.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(nexus_ps1_cpu PUBLIC cxx_std_17)
@@ -33,6 +34,10 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_bios_vram_tests tests/BiosVramTests.cpp)
     target_link_libraries(nexus_ps1_bios_vram_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_bios_vram_tests COMMAND nexus_ps1_bios_vram_tests)
+
+    add_executable(nexus_ps1_dma_tests tests/DmaControllerTests.cpp)
+    target_link_libraries(nexus_ps1_dma_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_dma_tests COMMAND nexus_ps1_dma_tests)
 
     add_executable(nexus_ps1_gpu_tests tests/GpuTests.cpp)
     target_link_libraries(nexus_ps1_gpu_tests PRIVATE nexus_ps1_cpu)
