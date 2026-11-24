@@ -61,6 +61,10 @@ public:
 
     void reset() noexcept;
     void writeGp0(std::uint32_t value);
+    // Staged FIFO interface; queued words execute only when serviceGp0Fifo is called.
+    bool enqueueGp0(std::uint32_t value) noexcept;
+    std::size_t serviceGp0Fifo(std::size_t maxWords);
+    std::size_t gp0FifoSize() const noexcept { return gp0Fifo_.size(); }
     std::uint32_t readGp0();
     void writeGp1(std::uint32_t value) noexcept;
     std::uint32_t readStatus() const noexcept;
@@ -76,6 +80,7 @@ private:
     enum class TransferMode { None, CpuToVram, VramToCpu };
 
     Vram& vram_;
+    GpuFifo gp0Fifo_;
     std::vector<std::uint32_t> packet_;
     std::size_t expectedWords_ = 0;
     TransferMode transferMode_ = TransferMode::None;
@@ -110,6 +115,7 @@ private:
     static std::uint32_t color24To15(std::uint32_t rgb) noexcept;
     static std::uint32_t decodeTransferDimension(std::uint16_t value,
                                                   std::uint32_t maximum) noexcept;
+    void processGp0Word(std::uint32_t value);
     void acceptPacketWord(std::uint32_t value);
     void executePacket();
     void beginImageTransfer(TransferMode mode);
