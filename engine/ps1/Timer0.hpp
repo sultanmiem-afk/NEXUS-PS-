@@ -37,6 +37,7 @@ private:
     bool reachedTarget_ = false;
     bool reachedOverflow_ = false;
     bool irqArmed_ = true;
+    bool irqRequest_ = true;
 };
 
 } // namespace nexus::ps1
