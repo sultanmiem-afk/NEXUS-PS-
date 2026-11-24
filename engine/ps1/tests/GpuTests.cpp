@@ -65,7 +65,7 @@ int main() {
     vram.writePixel(3, 1, 0x03E0u);  // CLUT entry 3.
     gpu.writeGp0(0x24808080u); // neutral modulation for indexed texture.
     gpu.writeGp0(500u | (100u << 16));
-    gpu.writeGp0(0u | (1u << 16)); // CLUT X=0, Y=1.
+    gpu.writeGp0(0u | (64u << 16)); // CLUT X=0, Y=1.
     gpu.writeGp0(520u | (100u << 16));
     gpu.writeGp0(0x00000000u); // UV + tpage: 4-bit page at X=0.
     gpu.writeGp0(500u | (120u << 16));
@@ -77,7 +77,7 @@ int main() {
     vram.writePixel(42, 2, 0x7C00u);  // CLUT entry 42.
     gpu.writeGp0(0x24808080u); // neutral modulation for indexed texture.
     gpu.writeGp0(550u | (100u << 16));
-    gpu.writeGp0(0u | (2u << 16)); // CLUT Y=2.
+    gpu.writeGp0(0u | (128u << 16)); // CLUT X=0, Y=2.
     gpu.writeGp0(570u | (100u << 16));
     gpu.writeGp0(0x00000080u); // tpage depth bits = 1 (8-bit), page X=0.
     gpu.writeGp0(550u | (120u << 16));
