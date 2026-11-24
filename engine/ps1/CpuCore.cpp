@@ -67,9 +67,15 @@ CpuStepResult CpuCore::step() {
 
     const Instruction ins(raw);
     const auto rs = state_.gpr[ins.rs()];
-    const auto rt = state_.gpr[ins.rt()];
-    // R3000A load delay: this instruction reads the old register values;
-    // the previous load becomes visible only after its operands are captured.
+    // Consecutive LWL/LWR instructions targeting the same register form one
+    // unaligned word load. Forward the pending partial result so the second
+    // merge combines with the first instead of the pre-load register value.
+    const bool merge_load = (ins.opcode() == 0x22u || ins.opcode() == 0x26u) &&
+                            pending_load_valid_ &&
+                            pending_load_register_ == ins.rt();
+    const auto rt = merge_load ? pending_load_value_ : state_.gpr[ins.rt()];
+    // Ordinary instructions still observe the R3000A load delay. The paired
+    // LWL/LWR forwarding above is the special case needed for unaligned loads.
     commit_pending_load();
     const auto imm = ins.signed_immediate();
     const auto uimm = static_cast<std::uint32_t>(ins.immediate());
