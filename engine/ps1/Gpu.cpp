@@ -88,6 +88,8 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         if (opcode == 0x02) expectedWords_ = 3;
         else if (opcode == 0x20) expectedWords_ = 4;
         else if (opcode == 0x28) expectedWords_ = 5;
+        else if (opcode == 0x30) expectedWords_ = 6;
+        else if (opcode == 0x38) expectedWords_ = 8;
         else if (opcode == 0x40) expectedWords_ = 3;
         else if (opcode == 0xA0 || opcode == 0xC0) expectedWords_ = 3;
         else {
@@ -110,6 +112,8 @@ void Gpu::executePacket() {
         executeFillRectangle();
     } else if (opcode == 0x20 || opcode == 0x28) {
         executeFlatPolygon();
+    } else if (opcode == 0x30 || opcode == 0x38) {
+        executeGouraudPolygon();
     } else if (opcode == 0x40) {
         executeFlatLine();
     } else if (opcode == 0xA0) {
@@ -205,6 +209,77 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
     }
 }
 
+
+
+void Gpu::executeGouraudPolygon() noexcept {
+    const bool quad = static_cast<std::uint8_t>(packet_[0] >> 24) == 0x38;
+    const int vertexCount = quad ? 4 : 3;
+    int x[4]{};
+    int y[4]{};
+    std::uint32_t colors[4]{};
+    const int offsetX = signExtend11(drawOffset_ & 0x7FFu);
+    const int offsetY = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    for (int i = 0; i < vertexCount; ++i) {
+        const std::size_t colorWord = static_cast<std::size_t>(i) * 2;
+        const std::size_t xyWord = colorWord + 1;
+        colors[i] = packet_[colorWord];
+        x[i] = signExtend11(packet_[xyWord]) + offsetX;
+        y[i] = signExtend11(packet_[xyWord] >> 16) + offsetY;
+    }
+    drawGouraudTriangle(x[0], y[0], colors[0],
+                        x[1], y[1], colors[1],
+                        x[2], y[2], colors[2]);
+    if (quad) {
+        drawGouraudTriangle(x[1], y[1], colors[1],
+                            x[2], y[2], colors[2],
+                            x[3], y[3], colors[3]);
+    }
+}
+
+void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
+                              int x1, int y1, std::uint32_t c1,
+                              int x2, int y2, std::uint32_t c2) noexcept {
+    const long long area = edgeFunction(x0, y0, x1, y1, x2, y2);
+    if (area == 0) return;
+    const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
+    const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
+    const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
+    const int bottom = static_cast<int>((drawAreaBottomRight_ >> 10) & 0x1FFu);
+    const int minX = std::max({0, left, std::min({x0, x1, x2})});
+    const int minY = std::max({0, top, std::min({y0, y1, y2})});
+    const int maxX = std::min({static_cast<int>(Vram::kWidth) - 1, right,
+                               std::max({x0, x1, x2})});
+    const int maxY = std::min({static_cast<int>(Vram::kHeight) - 1, bottom,
+                               std::max({y0, y1, y2})});
+    if (minX > maxX || minY > maxY) return;
+    const std::uint32_t channel0[3] = {c0 & 0xFFu, (c0 >> 8) & 0xFFu, (c0 >> 16) & 0xFFu};
+    const std::uint32_t channel1[3] = {c1 & 0xFFu, (c1 >> 8) & 0xFFu, (c1 >> 16) & 0xFFu};
+    const std::uint32_t channel2[3] = {c2 & 0xFFu, (c2 >> 8) & 0xFFu, (c2 >> 16) & 0xFFu};
+    for (int py = minY; py <= maxY; ++py) {
+        for (int px = minX; px <= maxX; ++px) {
+            long long w2 = edgeFunction(x0, y0, x1, y1, px, py);
+            long long w0 = edgeFunction(x1, y1, x2, y2, px, py);
+            long long w1 = edgeFunction(x2, y2, x0, y0, px, py);
+            const bool inside = area > 0 ? (w0 >= 0 && w1 >= 0 && w2 >= 0)
+                                         : (w0 <= 0 && w1 <= 0 && w2 <= 0);
+            if (!inside) continue;
+            if (area < 0) { w0 = -w0; w1 = -w1; w2 = -w2; }
+            const std::uint64_t denominator = static_cast<std::uint64_t>(area > 0 ? area : -area);
+            std::uint32_t rgb = 0;
+            for (int channel = 0; channel < 3; ++channel) {
+                const std::uint64_t weighted =
+                    static_cast<std::uint64_t>(channel0[channel]) * static_cast<std::uint64_t>(w0) +
+                    static_cast<std::uint64_t>(channel1[channel]) * static_cast<std::uint64_t>(w1) +
+                    static_cast<std::uint64_t>(channel2[channel]) * static_cast<std::uint64_t>(w2);
+                const std::uint32_t value = static_cast<std::uint32_t>(weighted / denominator);
+                rgb |= value << (channel * 8);
+            }
+            vram_.writePixel(static_cast<std::uint32_t>(px),
+                             static_cast<std::uint32_t>(py),
+                             static_cast<std::uint16_t>(color24To15(rgb)));
+        }
+    }
+}
 
 void Gpu::executeFlatLine() noexcept {
     const std::uint16_t color = static_cast<std::uint16_t>(color24To15(packet_[0]));
