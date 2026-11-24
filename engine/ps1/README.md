@@ -48,3 +48,8 @@ The current experimental GPU subset also accepts GP0(40h) flat-line packets and 
 ### Gouraud shading milestone
 
 Added experimental GP0(30h) Gouraud-shaded triangle and GP0(38h) Gouraud-shaded quad support. Vertex RGB colors are interpolated across covered pixels and converted to the PS1 15-bit VRAM format. This is an initial software rasterizer; exact console edge rules, color precision, and hardware timing still require validation.
+
+
+### Initial textured polygon support
+
+Added experimental GP0(24h) textured triangle and GP0(2Ch) textured quad handling for 15-bit direct-color texture pages, including affine UV interpolation, texture-window coordinate masking, transparent texel skip, and draw-area clipping. Indexed 4-bit/8-bit CLUT texture modes, modulation, semi-transparency, dithering, and exact hardware rasterization rules remain unsupported and need dedicated tests.
