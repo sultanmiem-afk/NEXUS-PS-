@@ -11,6 +11,8 @@ namespace nexus::ps1 {
 struct GpuTimingEvents {
     std::uint32_t dotClockTicks = 0;
     std::uint32_t hBlankPulses = 0;
+    bool hBlankActive = false;
+    bool vBlankActive = false;
 };
 
 // Early GP0/GP1 command processor. This is a functional subset, not a
@@ -55,7 +57,10 @@ private:
     std::uint32_t displayMode_ = 0;
     std::uint32_t gpuClockRemainder_ = 0;
     std::uint32_t scanlineClock_ = 0;
+    std::uint32_t scanline_ = 0;
     std::uint32_t dotClockRemainder_ = 0;
+    bool hBlankActive_ = false;
+    bool vBlankActive_ = true;
     std::uint32_t drawMode_ = 0;
     std::uint32_t textureWindow_ = 0;
     std::uint32_t drawAreaTopLeft_ = 0;
