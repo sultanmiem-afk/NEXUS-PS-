@@ -259,6 +259,17 @@ int main() {
     gpu.writeGp1(0x00000000u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
 
+    // GP0 FIFO service credits follow GPU clock time and preserve fractional phase.
+    gpu.reset();
+    const auto fifoTimingA = gpu.advanceTiming(1u);
+    assert(fifoTimingA.gp0ServiceWords == 0u);
+    const auto fifoTimingB = gpu.advanceTiming(1u);
+    assert(fifoTimingB.gp0ServiceWords == 1u);
+    const auto fifoTimingC = gpu.advanceTiming(1u);
+    assert(fifoTimingC.gp0ServiceWords == 0u);
+    const auto fifoTimingD = gpu.advanceTiming(1u);
+    assert(fifoTimingD.gp0ServiceWords == 1u);
+
     // GPUSTAT readiness and DMA request bits follow the selected direction.
     gpu.reset();
     std::uint32_t status = gpu.readStatus();
