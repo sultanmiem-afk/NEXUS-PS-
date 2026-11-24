@@ -177,6 +177,9 @@ bool DmaController::executeGpuTransfer(Ram& ram, Gpu& gpu) {
     if (!success) return false;
     channel.base = address & 0x00FFFFFFu;
     channel.channelControl &= ~((1u << 24) | (1u << 28));
+    // Completion latches this channel's DICR flag; channel/master enables
+    // determine whether the DMA controller asserts its IRQ output.
+    dicrFlags_ |= (1u << (24u + kGpuChannel));
     return true;
 }
 
