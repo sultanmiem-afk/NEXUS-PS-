@@ -353,5 +353,28 @@ int main() {
     fifo.clear();
     assert(fifo.empty());
     assert(fifo.size() == 0u);
+
+    // Deterministic FIFO stress test: repeated mixed push/pop operations
+    // verify ordering while the ring buffer wraps many times.
+    GpuFifo stressFifo;
+    std::uint32_t expectedNext = 0u;
+    std::uint32_t consumed = 0u;
+    for (std::uint32_t round = 0; round < 2000u; ++round) {
+        for (std::uint32_t i = 0; i < 12u; ++i) {
+            assert(stressFifo.push(0x5A000000u | expectedNext));
+            ++expectedNext;
+        }
+        for (std::uint32_t i = 0; i < 9u; ++i) {
+            assert(stressFifo.pop(fifoWord));
+            assert(fifoWord == (0x5A000000u | consumed));
+            ++consumed;
+        }
+    }
+    while (!stressFifo.empty()) {
+        assert(stressFifo.pop(fifoWord));
+        assert(fifoWord == (0x5A000000u | consumed));
+        ++consumed;
+    }
+    assert(consumed == expectedNext);
     return 0;
 }
