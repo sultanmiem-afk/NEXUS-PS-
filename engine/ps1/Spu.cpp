@@ -195,14 +195,18 @@ bool Spu::nextVoiceSample(std::size_t index, std::int16_t& sample) noexcept {
     if (voice.adpcmEnd) {
         if (!voice.adpcmRepeat) {
             voice.keyedOn = false;
+            voice.adsrPhase = AdsrPhase::Release;
+            adsrRateCounters_[index] = 0;
             voice.adpcmBlockValid = false;
-            return true; // The final sample of the block was delivered.
+            return true; // The final sample was delivered; the envelope now releases.
         }
         voice.currentAddress = voice.repeatAddress;
     } else {
         // Each sound-RAM ADPCM block is 16 bytes = two 8-byte address units.
         if (voice.currentAddress > 0xFFFDu) {
             voice.keyedOn = false;
+            voice.adsrPhase = AdsrPhase::Release;
+            adsrRateCounters_[index] = 0;
             voice.adpcmBlockValid = false;
             return true;
         }
@@ -211,6 +215,8 @@ bool Spu::nextVoiceSample(std::size_t index, std::int16_t& sample) noexcept {
 
     if (!decodeVoiceBlock(index)) {
         voice.keyedOn = false;
+        voice.adsrPhase = AdsrPhase::Release;
+        adsrRateCounters_[index] = 0;
         voice.adpcmBlockValid = false;
     }
     return true;
