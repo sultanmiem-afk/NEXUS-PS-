@@ -57,7 +57,14 @@ int main() {
     assert(bus.read32(0xBFC00000u, word) && word == 0x5A5A5A5Au);
     assert(!bus.read32(0x1F801000u, word));
 
-    // DMA registers are mapped through the CPU-visible memory bus.\n    assert(bus.write32(0x1F801080u, 0x00123456u));\n    assert(bus.read32(0x1F801080u, word) && word == 0x00123456u);\n    assert(bus.write32(0x1F8010F0u, 0x0FFFFFFFu));\n    assert(bus.read32(0x1F8010F0u, word) && word == 0x0FFFFFFFu);\n    assert(!bus.read32(0x1F8010F8u, word));\n\n    // Alignment rules apply to halfword and word accesses.
+    // DMA registers are mapped through the CPU-visible memory bus.
+    assert(bus.write32(0x1F801080u, 0x00123456u));
+    assert(bus.read32(0x1F801080u, word) && word == 0x00123456u);
+    assert(bus.write32(0x1F8010F0u, 0x0FFFFFFFu));
+    assert(bus.read32(0x1F8010F0u, word) && word == 0x0FFFFFFFu);
+    assert(!bus.read32(0x1F8010F8u, word));
+
+    // Alignment rules apply to halfword and word accesses.
     std::uint16_t half = 0;
     assert(!bus.read16(0x1F800001u, half));
 
