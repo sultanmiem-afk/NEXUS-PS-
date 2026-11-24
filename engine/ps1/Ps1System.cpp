@@ -29,6 +29,9 @@ SystemStepResult Ps1System::step() {
     result.timer0Irq = memory_.timer0().advance(result.cpu.cycles);
     if (result.timer0Irq)
         memory_.interrupts().request(1u << 4); // I_STAT Timer 0 source
+    result.timer1Irq = memory_.timer1().advance(result.cpu.cycles);
+    if (result.timer1Irq)
+        memory_.interrupts().request(1u << 5); // I_STAT Timer 1 source
     result.dmaTransferred = memory_.dma().executeGpuTransfer(memory_.ram(), gpu_);
     if (result.dmaTransferred)
         result.dmaWords = memory_.dma().lastTransferWords();
