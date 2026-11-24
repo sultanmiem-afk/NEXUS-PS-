@@ -107,6 +107,20 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
     assert(system.cpu().state().pc == 0x80000080u);
 
+    // Timer 2 CPU-clock mode raises I_STAT source 6 and reaches the CPU IRQ path.
+    system.reset(0x00000000u);
+    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 6));
+    assert(system.memory().write32(Timer2::kTargetAddress, 1u));
+    assert(system.memory().write32(Timer2::kModeAddress, 1u << 4));
+    putWord(system.memory().ram(), 0, 0x00000000u);
+    const auto timer2Step = system.step();
+    assert(timer2Step.cpu.status == CpuStepStatus::Executed);
+    assert(timer2Step.timer2Irq);
+    assert((system.memory().interrupts().status() & (1u << 6)) != 0u);
+    system.cpu().cop0().write(Cop0::kStatus, (1u << 0) | (1u << 10));
+    assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(system.cpu().state().pc == 0x80000080u);
+
     // GPU-generated dot-clock and HBlank events feed Timer 0 and Timer 1.
     system.reset(0x00000000u);
     assert(system.memory().write32(Timer0::kTargetAddress, 1u));
