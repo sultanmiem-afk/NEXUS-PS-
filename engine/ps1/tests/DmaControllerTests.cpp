@@ -118,6 +118,36 @@ int main() {
         assert(value == testWords[i]);
     }
 
+    // Larger 256-word DMA round-trip to exercise sustained multi-block data movement.
+    for (std::uint32_t i = 0; i < 256u; ++i) {
+        const std::uint32_t pattern = 0x9E3779B9u * (i + 1u) ^ (0xA5A50000u + i);
+        assert(ram.write32(0x1000u + i * 4u, pattern));
+    }
+
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(0x00010000u); // X=0, Y=1.
+    gpu.writeGp0(0x00010200u); // 512 pixels x 1 row = 256 words.
+    assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x1000u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 256u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000001u));
+    assert(dma.executeGpuTransfer(ram, gpu));
+    assert(dma.lastTransferWords() == 256u);
+
+    gpu.writeGp0(0xC0000000u);
+    gpu.writeGp0(0x00010000u);
+    gpu.writeGp0(0x00010200u);
+    assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x2000u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 256u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000000u));
+    assert(dma.executeGpuTransfer(ram, gpu));
+    assert(dma.lastTransferWords() == 256u);
+    for (std::uint32_t i = 0; i < 256u; ++i) {
+        std::uint32_t original = 0;
+        assert(ram.read32(0x1000u + i * 4u, original));
+        assert(ram.read32(0x2000u + i * 4u, value));
+        assert(value == original);
+    }
+
     dma.reset();
     assert(dma.read32(DmaController::kDpcrAddress, value) && value == 0x07654321u);
     assert(dma.read32(DmaController::kBaseAddress, value) && value == 0u);
