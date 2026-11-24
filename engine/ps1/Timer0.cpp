@@ -9,10 +9,12 @@ void Timer0::reset() noexcept {
     reachedTarget_ = false;
     reachedOverflow_ = false;
     irqArmed_ = true;
+    irqRequest_ = true;
 }
 
 std::uint32_t Timer0::mode() const noexcept {
     return (mode_ & 0x3FFu) |
+           (irqRequest_ ? (1u << 10) : 0u) |
            (reachedTarget_ ? (1u << 11) : 0u) |
            (reachedOverflow_ ? (1u << 12) : 0u);
 }
@@ -36,6 +38,7 @@ bool Timer0::advance(std::uint32_t cpuCycles) noexcept {
                            (overflow && (mode_ & kIrqAtOverflow) != 0u);
         if (event && ((mode_ & kIrqRepeat) != 0u || irqArmed_)) {
             irq = true;
+            irqRequest_ = false;
             if ((mode_ & kIrqRepeat) == 0u) irqArmed_ = false;
         }
 
@@ -70,6 +73,7 @@ bool Timer0::write32(std::uint32_t address, std::uint32_t value) noexcept {
         reachedTarget_ = false;
         reachedOverflow_ = false;
         irqArmed_ = true;
+        irqRequest_ = true;
         return true;
     case kTargetAddress:
         target_ = static_cast<std::uint16_t>(value);
