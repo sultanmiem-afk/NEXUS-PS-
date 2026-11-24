@@ -15,6 +15,8 @@ struct SystemStepResult {
     CpuStepResult cpu{};
     bool dmaTransferred = false;
     std::uint32_t dmaWords = 0;
+    bool cdromDmaTransferred = false;
+    std::uint32_t cdromDmaWords = 0;
     bool timer0Irq = false;
     bool timer1Irq = false;
     bool timer2Irq = false;
