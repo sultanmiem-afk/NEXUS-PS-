@@ -53,6 +53,8 @@ private:
     std::uint8_t interruptEnable_ = 0;
     std::uint8_t interruptFlags_ = 0;
     std::uint8_t mode_ = 0;
+    std::uint8_t filterFile_ = 0;
+    std::uint8_t filterChannel_ = 0;
     std::uint8_t request_ = 0;
     std::uint32_t currentLba_ = 0;
     std::uint32_t cycleRemainder_ = 0;
@@ -68,6 +70,7 @@ private:
     void produceSector() noexcept;
     bool readSector(std::uint32_t lba, std::vector<std::uint8_t>& output) const;
     static std::uint8_t fromBcd(std::uint8_t value) noexcept;
+    static std::uint8_t toBcd(std::uint32_t value) noexcept;
 };
 
 } // namespace nexus::ps1
