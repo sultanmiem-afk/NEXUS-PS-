@@ -22,7 +22,7 @@ It is not yet a complete emulator and cannot boot commercial games at this stage
 
 ## GPU limitations
 
-The GPU is only an early command-processing subset. Line rasterization, textured and Gouraud-shaded primitives, blending, dithering,
+The GPU is only an early command-processing subset. Textured primitives, blending, dithering,
 texture-window behavior, mask semantics, display scanout, GPU timing/IRQ generation,
 and DMA integration are not implemented. The current flat polygon rasterizer is
 an initial pixel-level implementation and still needs edge-rule/hardware validation. GP0 command FIFO behavior and status
@@ -43,3 +43,8 @@ No BIOS or game images are included.
 ### Additional GPU rasterization
 
 The current experimental GPU subset also accepts GP0(40h) flat-line packets and rasterizes them into VRAM with drawing-area clipping and drawing offsets. This remains a small command subset: it is not yet cycle-accurate, does not implement Gouraud shading or textured polygons, and has no GPU DMA/display scanout integration.
+
+
+### Gouraud shading milestone
+
+Added experimental GP0(30h) Gouraud-shaded triangle and GP0(38h) Gouraud-shaded quad support. Vertex RGB colors are interpolated across covered pixels and converted to the PS1 15-bit VRAM format. This is an initial software rasterizer; exact console edge rules, color precision, and hardware timing still require validation.
