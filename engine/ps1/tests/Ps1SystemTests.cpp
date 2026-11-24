@@ -42,7 +42,8 @@ int main() {
     putWord(system.memory().ram(), 8, 0x34021234u); // ORI r2, r0, 1234
     putWord(system.memory().ram(), 12, iType(0x29u, 1u, 2u, 0u)); // SH r2, 0(r1)
     putWord(system.memory().ram(), 16, iType(0x25u, 1u, 3u, 0u)); // LHU r3, 0(r1)
-    for (int i = 0; i < 5; ++i) assert(system.step().cpu.status == CpuStepStatus::Executed);
+    putWord(system.memory().ram(), 20, 0x00000000u); // NOP commits delayed LHU result
+    for (int i = 0; i < 6; ++i) assert(system.step().cpu.status == CpuStepStatus::Executed);
     assert(system.cpu().state().gpr[3] == 0x1234u);
     std::uint16_t spuVoiceVolume = 0;
     assert(system.memory().spu().readRegister16(0u, spuVoiceVolume));
