@@ -1,6 +1,7 @@
 #include "Gpu.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace nexus::ps1 {
 
@@ -87,6 +88,7 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         if (opcode == 0x02) expectedWords_ = 3;
         else if (opcode == 0x20) expectedWords_ = 4;
         else if (opcode == 0x28) expectedWords_ = 5;
+        else if (opcode == 0x40) expectedWords_ = 3;
         else if (opcode == 0xA0 || opcode == 0xC0) expectedWords_ = 3;
         else {
             ++unsupportedCommandCount_;
@@ -108,6 +110,8 @@ void Gpu::executePacket() {
         executeFillRectangle();
     } else if (opcode == 0x20 || opcode == 0x28) {
         executeFlatPolygon();
+    } else if (opcode == 0x40) {
+        executeFlatLine();
     } else if (opcode == 0xA0) {
         beginImageTransfer(TransferMode::CpuToVram);
     } else if (opcode == 0xC0) {
@@ -198,6 +202,42 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
             if (inside) vram_.writePixel(static_cast<std::uint32_t>(px),
                                          static_cast<std::uint32_t>(py), color);
         }
+    }
+}
+
+
+void Gpu::executeFlatLine() noexcept {
+    const std::uint16_t color = static_cast<std::uint16_t>(color24To15(packet_[0]));
+    const int offsetX = signExtend11(drawOffset_ & 0x7FFu);
+    const int offsetY = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    drawLine(signExtend11(packet_[1]) + offsetX,
+             signExtend11(packet_[1] >> 16) + offsetY,
+             signExtend11(packet_[2]) + offsetX,
+             signExtend11(packet_[2] >> 16) + offsetY, color);
+}
+
+void Gpu::drawLine(int x0, int y0, int x1, int y1,
+                   std::uint16_t color) noexcept {
+    const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
+    const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
+    const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
+    const int bottom = static_cast<int>((drawAreaBottomRight_ >> 10) & 0x1FFu);
+    const int dx = std::abs(x1 - x0);
+    const int sx = x0 < x1 ? 1 : -1;
+    const int dy = -std::abs(y1 - y0);
+    const int sy = y0 < y1 ? 1 : -1;
+    int error = dx + dy;
+    for (;;) {
+        if (x0 >= left && x0 <= right && y0 >= top && y0 <= bottom &&
+            x0 >= 0 && x0 < static_cast<int>(Vram::kWidth) &&
+            y0 >= 0 && y0 < static_cast<int>(Vram::kHeight)) {
+            vram_.writePixel(static_cast<std::uint32_t>(x0),
+                             static_cast<std::uint32_t>(y0), color);
+        }
+        if (x0 == x1 && y0 == y1) break;
+        const int twiceError = 2 * error;
+        if (twiceError >= dy) { error += dy; x0 += sx; }
+        if (twiceError <= dx) { error += dx; y0 += sy; }
     }
 }
 
