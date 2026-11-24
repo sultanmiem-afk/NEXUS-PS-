@@ -87,8 +87,8 @@ bool DmaController::write32(std::uint32_t address,
     } else if (reg == 0x4u) {
         ch.blockControl = value;
     } else if (reg == 0x8u) {
-        // Preserve writable control bits. Transfer start/clear semantics are
-        // intentionally not simulated until the DMA execution engine exists.
+        // Preserve the modeled writable control bits. The system integration
+        // layer explicitly invokes executeGpuTransfer for channel 2.
         ch.channelControl = value & 0x71770703u;
     } else {
         return false;
