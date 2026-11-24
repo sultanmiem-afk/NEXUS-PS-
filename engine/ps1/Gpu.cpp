@@ -26,6 +26,7 @@ void Gpu::reset() noexcept {
     verticalRange_ = 0x3FC10u;
     displayMode_ = 0;
     gpuClockRemainder_ = 0;
+    gp0ServiceRemainder_ = 0;
     scanlineClock_ = 0;
     scanline_ = 0;
     dotClockRemainder_ = 0;
@@ -48,6 +49,11 @@ GpuTimingEvents Gpu::advanceTiming(std::uint32_t cpuCycles) noexcept {
     const std::uint32_t scaled = gpuClockRemainder_ +
         cpuCycles * kGpuClocksPerCpuNumerator;
     const std::uint32_t gpuClocks = scaled / kGpuClocksPerCpuDenominator;
+    // Simplified GP0 command-port throughput: one FIFO word per two GPU clocks.
+    // Keep the half-rate phase across CPU steps so small steps do not lose credits.
+    const std::uint32_t serviceScaled = gp0ServiceRemainder_ + gpuClocks;
+    events.gp0ServiceWords = serviceScaled / 2u;
+    gp0ServiceRemainder_ = serviceScaled % 2u;
     gpuClockRemainder_ = scaled % kGpuClocksPerCpuDenominator;
 
     const std::uint32_t horizontalMode = displayMode_ & 3u;
