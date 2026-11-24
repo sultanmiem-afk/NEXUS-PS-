@@ -10,6 +10,14 @@ constexpr std::uint32_t sign_extend8(std::uint8_t v) noexcept {
 constexpr std::uint32_t sign_extend16(std::uint16_t v) noexcept {
     return static_cast<std::uint32_t>(static_cast<std::int32_t>(static_cast<std::int16_t>(v)));
 }
+constexpr std::uint32_t arithmetic_shift_right(std::uint32_t value, unsigned amount) noexcept {
+    amount &= 31u;
+    if (amount == 0u) return value;
+    const std::uint32_t shifted = value >> amount;
+    return (value & 0x80000000u) != 0u
+        ? shifted | (0xFFFFFFFFu << (32u - amount))
+        : shifted;
+}
 }
 
 void CpuCore::reset(std::uint32_t reset_vector) noexcept {
@@ -110,12 +118,10 @@ CpuStepResult CpuCore::step() {
         switch (ins.function()) {
         case 0x00: write_reg(ins.rd(), rt << ins.shift_amount()); break; // SLL
         case 0x02: write_reg(ins.rd(), rt >> ins.shift_amount()); break; // SRL
-        case 0x03: write_reg(ins.rd(), static_cast<std::uint32_t>(
-            static_cast<std::int32_t>(rt) >> ins.shift_amount())); break; // SRA
+        case 0x03: write_reg(ins.rd(), arithmetic_shift_right(rt, ins.shift_amount())); break; // SRA
         case 0x04: write_reg(ins.rd(), rt << (rs & 31u)); break; // SLLV
         case 0x06: write_reg(ins.rd(), rt >> (rs & 31u)); break; // SRLV
-        case 0x07: write_reg(ins.rd(), static_cast<std::uint32_t>(
-            static_cast<std::int32_t>(rt) >> (rs & 31u))); break; // SRAV
+        case 0x07: write_reg(ins.rd(), arithmetic_shift_right(rt, rs)); break; // SRAV
         case 0x08: branch(rs); in_delay_slot_ = true; break; // JR
         case 0x09: write_reg(ins.rd(), state_.pc + 4u);
                    branch(rs); in_delay_slot_ = true; break; // JALR
