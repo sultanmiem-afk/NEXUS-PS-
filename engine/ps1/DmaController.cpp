@@ -1,5 +1,7 @@
 #include "DmaController.hpp"
 
+#include "Cdrom.hpp"
+
 #include "Gpu.hpp"
 #include "Ram.hpp"
 
@@ -12,6 +14,7 @@ void DmaController::reset() noexcept {
     dicrControl_ = 0;
     dicrFlags_ = 0;
     lastTransferWords_ = 0;
+    lastCdromTransferWords_ = 0;
 }
 
 std::uint32_t DmaController::base(std::size_t channel) const noexcept {
@@ -97,6 +100,42 @@ bool DmaController::write32(std::uint32_t address,
     return true;
 }
 
+
+bool DmaController::executeCdromTransfer(Ram& ram, Cdrom& cdrom) {
+    constexpr std::size_t kCdromChannel = 3u;
+    constexpr std::uint32_t kMaxTransferWords = 1u << 20;
+    Channel& channel = channels_[kCdromChannel];
+    lastCdromTransferWords_ = 0u;
+
+    const std::uint32_t control = channel.channelControl;
+    const bool started = (control & (1u << 24)) != 0u;
+    const bool enabled = (dpcr_ & (1u << (kCdromChannel * 4u + 3u))) != 0u;
+    const bool deviceToRam = (control & 1u) == 0u;
+    const std::uint32_t sync = (control >> 9u) & 3u;
+    if (!started || !enabled || !deviceToRam || sync != 1u) return false;
+
+    const std::uint32_t blockSize = (channel.blockControl & 0xFFFFu) == 0u
+        ? 0x10000u : (channel.blockControl & 0xFFFFu);
+    const std::uint32_t blockCount = (channel.blockControl >> 16u) == 0u
+        ? 0x10000u : (channel.blockControl >> 16u);
+    if (blockSize > kMaxTransferWords ||
+        blockCount > kMaxTransferWords / blockSize) return false;
+    const std::uint32_t words = blockSize * blockCount;
+    if (cdrom.dataAvailableBytes() < static_cast<std::size_t>(words) * 4u)
+        return false;
+
+    std::uint32_t address = channel.base & 0x00FFFFFCu;
+    for (std::uint32_t i = 0; i < words; ++i) {
+        std::uint32_t value = 0u;
+        if (!cdrom.readDataWord(value) || !ram.write32(address, value)) return false;
+        address = (address + 4u) & 0x00FFFFFFu;
+        ++lastCdromTransferWords_;
+    }
+    channel.base = address & 0x00FFFFFFu;
+    channel.channelControl &= ~(1u << 24u);
+    dicrFlags_ |= (1u << (24u + kCdromChannel));
+    return true;
+}
 
 bool DmaController::executeGpuLinearTransfer(
     Ram& ram, Gpu& gpu, std::uint32_t& address, std::uint32_t words,
