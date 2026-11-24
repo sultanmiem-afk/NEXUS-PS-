@@ -30,8 +30,8 @@ void Cdrom::reset() noexcept {
 bool Cdrom::loadImage(const std::vector<std::uint8_t>& image) noexcept {
     if (image.empty()) return false;
     std::size_t sectorSize = 0;
-    if ((image.size() % kCookedSectorSize) == 0u) sectorSize = kCookedSectorSize;
-    else if ((image.size() % kRawSectorSize) == 0u) sectorSize = kRawSectorSize;
+    if ((image.size() % kRawSectorSize) == 0u) sectorSize = kRawSectorSize;
+    else if ((image.size() % kCookedSectorSize) == 0u) sectorSize = kCookedSectorSize;
     else return false;
     image_ = image;
     sectorSize_ = sectorSize;
@@ -52,7 +52,8 @@ void Cdrom::pushResponse(std::uint8_t value) noexcept {
 }
 
 void Cdrom::raiseInterrupt(std::uint8_t code) noexcept {
-    interruptFlags_ = static_cast<std::uint8_t>((interruptFlags_ & 0xF8u) | (code & 0x07u));
+    if (code >= 1u && code <= 5u)
+        interruptFlags_ = static_cast<std::uint8_t>(interruptFlags_ | (1u << (code - 1u)));
 }
 
 std::uint8_t Cdrom::fromBcd(std::uint8_t value) noexcept {
