@@ -139,7 +139,7 @@ int main() {
 
     // Textured 1x1 sprite samples a direct-color texel from the active page.
     vram.writePixel(2u, 3u, 0x7C00u);
-    gpu.writeGp0(0xE1000200u); // 15-bit page, X=0.
+    gpu.writeGp0(0xE1000100u); // 15-bit page, X=0.
     gpu.writeGp0(0x6E000000u); // raw, opaque, fixed 1x1 textured rectangle.
     gpu.writeGp0(820u | (100u << 16));
     gpu.writeGp0(2u | (3u << 8));
