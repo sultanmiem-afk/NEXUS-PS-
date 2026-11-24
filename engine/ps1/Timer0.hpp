@@ -21,6 +21,7 @@ private:
     std::uint16_t counter_=0,target_=0;
     std::uint32_t mode_=0;
     bool reachedTarget_=false,reachedOverflow_=false,irqArmed_=true,irqRequest_=true;
+    std::uint8_t irqPulseTicks_=0;
     bool hBlankActive_=false,syncStarted_=false;
 };
 } // namespace nexus::ps1
