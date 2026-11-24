@@ -8,6 +8,7 @@ namespace nexus::ps1 {
 
 class Ram;
 class Gpu;
+class Cdrom;
 
 // Seven-channel DMA register model with explicit GPU transfer execution.
 class DmaController final {
@@ -26,6 +27,8 @@ public:
     // Executes a pending channel-2 transfer synchronously. Bus timing,
     // arbitration and IRQ delivery are handled by later system integration.
     bool executeGpuTransfer(Ram& ram, Gpu& gpu);
+    bool executeCdromTransfer(Ram& ram, Cdrom& cdrom);
+    std::uint32_t lastCdromTransferWords() const noexcept { return lastCdromTransferWords_; }
     std::uint32_t lastTransferWords() const noexcept { return lastTransferWords_; }
 
     std::uint32_t base(std::size_t channel) const noexcept;
@@ -46,6 +49,7 @@ private:
     std::uint32_t dicrControl_ = 0;
     std::uint32_t dicrFlags_ = 0;
     std::uint32_t lastTransferWords_ = 0;
+    std::uint32_t lastCdromTransferWords_ = 0;
 
     bool masterIrq() const noexcept;
     bool executeGpuLinearTransfer(Ram& ram, Gpu& gpu, std::uint32_t& address,
