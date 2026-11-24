@@ -23,7 +23,7 @@ int main() {
     assert(bios.read32(0xBFC00000u, word) && word == 0x12345678u);
     assert(!bios.read32(0x1FC00001u, word));
     std::uint8_t byte = 0;
-    assert(!bios.write8); // BIOS exposes read-only operations only.
+    // The BIOS API intentionally exposes no write methods (read-only ROM).
     bios.unload();
     assert(!bios.loaded() && !bios.read8(0x1FC00000u, byte));
 
