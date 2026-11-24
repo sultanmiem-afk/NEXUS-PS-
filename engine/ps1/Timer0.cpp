@@ -20,14 +20,20 @@ std::uint32_t Timer0::mode() const noexcept {
 }
 
 bool Timer0::advance(std::uint32_t cpuCycles) noexcept {
-    if ((mode_ & kSyncEnable) != 0u) return false;
-    const auto clockSource = (mode_ & kClockSourceMask) >> 8;
-    // Timer 0 CPU-clock input is modeled for source 0. Other clock inputs
-    // require GPU dot-clock/HBlank integration and deliberately do not tick yet.
-    if (clockSource != 0u) return false;
+    if ((mode_ & kSyncEnable) != 0u ||
+        ((mode_ & kClockSourceMask) >> 8) != 0u) return false;
+    return advanceTicks(cpuCycles);
+}
 
+bool Timer0::advanceDotClockPulses(std::uint32_t pulses) noexcept {
+    if ((mode_ & kSyncEnable) != 0u ||
+        ((mode_ & kClockSourceMask) >> 8) != 1u) return false;
+    return advanceTicks(pulses);
+}
+
+bool Timer0::advanceTicks(std::uint32_t ticks) noexcept {
     bool irq = false;
-    for (std::uint32_t i = 0; i < cpuCycles; ++i) {
+    for (std::uint32_t i = 0; i < ticks; ++i) {
         const auto next = static_cast<std::uint32_t>(counter_) + 1u;
         const bool targetHit = next == target_;
         const bool overflow = next > 0xFFFFu;
@@ -47,8 +53,6 @@ bool Timer0::advance(std::uint32_t cpuCycles) noexcept {
         else
             counter_ = static_cast<std::uint16_t>(next);
     }
-    // Toggle mode affects the physical IRQ output waveform. The interrupt
-    // controller latches requests, so the initial model reports each event.
     (void)kIrqToggle;
     return irq;
 }
