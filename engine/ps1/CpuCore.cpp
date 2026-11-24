@@ -195,13 +195,12 @@ CpuStepResult CpuCore::step() {
                 in_delay_slot_ = true;
             }
         } else if (condition == 0x01u) { // BGEZ
-            if (!negative) {
-                branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
-                in_delay_slot_ = true;
-            }
+            if (!negative) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+            in_delay_slot_ = true;
         } else {
             raise_exception(CpuException::ReservedInstruction);
         }
+        if (condition == 0x00u) in_delay_slot_ = true;
         break;
     }
 
@@ -214,10 +213,22 @@ CpuStepResult CpuCore::step() {
         branch((state_.pc & 0xF0000000u) | (ins.jump_index() << 2));
         in_delay_slot_ = true;
         break;
-    case 0x04: if (rs == rt) { branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2)); in_delay_slot_ = true; } break;
-    case 0x05: if (rs != rt) { branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2)); in_delay_slot_ = true; } break;
-    case 0x06: if (static_cast<std::int32_t>(rs) <= 0) { branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2)); in_delay_slot_ = true; } break;
-    case 0x07: if (static_cast<std::int32_t>(rs) > 0) { branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2)); in_delay_slot_ = true; } break;
+    case 0x04: // BEQ
+        if (rs == rt) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+        in_delay_slot_ = true;
+        break;
+    case 0x05: // BNE
+        if (rs != rt) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+        in_delay_slot_ = true;
+        break;
+    case 0x06: // BLEZ
+        if (static_cast<std::int32_t>(rs) <= 0) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+        in_delay_slot_ = true;
+        break;
+    case 0x07: // BGTZ
+        if (static_cast<std::int32_t>(rs) > 0) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+        in_delay_slot_ = true;
+        break;
     case 0x08: {
         const auto sum = static_cast<std::int64_t>(static_cast<std::int32_t>(rs)) + imm;
         if (sum < std::numeric_limits<std::int32_t>::min() || sum > std::numeric_limits<std::int32_t>::max())
