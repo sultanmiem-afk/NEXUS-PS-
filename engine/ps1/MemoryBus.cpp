@@ -28,7 +28,6 @@ bool MemoryBus::read32(std::uint32_t address, std::uint32_t& value) {
     if (dma_.read32(address, value)) return true;
     if (interrupts_.read32(address, value)) return true;
     if (timer0_.read32(address, value)) return true;
-    if (timer0_.read32(address, value)) return true;
     return bios_.read32(address, value);
 }
 
