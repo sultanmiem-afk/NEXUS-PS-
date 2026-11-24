@@ -79,3 +79,21 @@ subchannel/Q data, full command/response timing, seek behavior, Mode 2 Form 2,
 error correction, and full disc filesystem handling are not implemented. Raw
 2352-byte extraction currently assumes user data begins at byte 24. A passing
 unit test validates this subset only; it does not demonstrate that a game boots.
+
+
+### CUE/BIN and CD-ROM DMA progress
+
+The CD-ROM controller can now bind a single-BIN CUE sheet to a supplied BIN
+buffer with `loadCue(cueText, binFilename, binBytes)`. It parses quoted FILE
+names, TRACK entries and INDEX 01 timestamps, maps disc LBAs to file sectors,
+and extracts 2048-byte user data for MODE1/2048, MODE1/2352 and MODE2/2352
+tracks. The current parser deliberately rejects multi-BIN sheets and mixed
+sector sizes within one BIN rather than guessing. It does not yet implement
+AUDIO tracks, pregap semantics, subchannel data, XA decoding, or every CUE
+directive. The Android file picker / filesystem loader is not present yet.
+
+DMA channel 3 has an initial request-mode device-to-RAM path. It transfers
+complete 32-bit words from the CD-ROM data FIFO into RAM, updates MADR, and
+sets the channel 3 DICR completion flag. This is a synchronous approximation:
+request pacing, partial block continuation, DMA arbitration and precise CD-ROM
+DMA timing still need work. It does not imply BIOS/game boot compatibility.
