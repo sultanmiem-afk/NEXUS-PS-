@@ -53,6 +53,12 @@ void Cop0::enter_exception(CpuState& cpu, CpuException code,
     cpu.next_pc = vector + 4u;
 }
 
+void Cop0::setHardwareInterruptPending(bool pending) noexcept {
+    constexpr std::uint32_t hardwareInterruptBit = 1u << 10;
+    if (pending) regs_[kCause] |= hardwareInterruptBit;
+    else regs_[kCause] &= ~hardwareInterruptBit;
+}
+
 void Cop0::return_from_exception() noexcept {
     auto& status = regs_[kStatus];
     status = (status & ~0x0Fu) | ((status >> 2) & 0x0Fu);
