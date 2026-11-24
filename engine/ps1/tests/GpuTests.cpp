@@ -216,11 +216,34 @@ int main() {
     gpu.writeGp0(310u | (305u << 16));
     assert(vram.readPixel(305, 303, pixel) && pixel == 0x001Fu);
 
-    // Flat semi-transparent line 0x42; poison XY data must stay inside the packet.
+    // Flat semi-transparent line 0x42; A0000000 is an XY payload, not GP0(A0).
     gpu.writeGp0(0xE1000000u); // Blend mode 0: average.
-    gpu.writeGp0(0xE5000000u | 330u | (300u << 11)); // Draw offset.
-    vram.writePixel(330u, 300u, 0x001Fu);
+    vram.writePixel(2u, 0u, 0x001Fu);
     gpu.writeGp0(0x4200FF00u);
+    gpu.writeGp0(0xA0000000u); // XY=(0,0).
+    gpu.writeGp0(4u); // XY=(4,0).
+    assert(vram.readPixel(2u, 0u, pixel) && pixel == 0x3DE0u);
+
+    // Gouraud line interpolates endpoint colors with poisoned XY data.
+    gpu.writeGp0(0x50000000u);
+    gpu.writeGp0(0xA0000000u); // XY0=(0,0), not a transfer command.
+    gpu.writeGp0(0x000000FFu); // Red endpoint color.
+    gpu.writeGp0(4u); // XY1=(4,0).
+    assert(vram.readPixel(4u, 0u, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(2u, 0u, pixel) && pixel != 0u && pixel != 0x001Fu);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(500u | (300u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(500u, 300u, pixel) && pixel == 0x001Fu);
+
+    // Gouraud semi-transparent line 0x52 blends its interpolated color.
+    vram.writePixel(2u, 0u, 0x001Fu);
+    gpu.writeGp0(0x5200FF00u);
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(0x0000FF00u);
+    gpu.writeGp0(4u);
+    assert(vram.readPixel(2u, 0u, pixel) && pixel == 0x3DE0u);
+
     gpu.writeGp0(0xA0000000u); // XY=(0,0), not GP0(A0).
     gpu.writeGp0(4u);
     assert(vram.readPixel(332u, 300u, pixel) && pixel == 0x3DE0u);
