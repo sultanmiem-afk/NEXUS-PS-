@@ -323,6 +323,21 @@ int main() {
     assert((status & (1u << 26)) != 0);
     assert((status & (1u << 28)) != 0);
 
+    // Staged GP0 FIFO integration: commands remain pending until serviced.
+    gpu.reset();
+    assert(gpu.enqueueGp0(0x020000FFu));
+    assert(gpu.enqueueGp0(900u | (400u << 16)));
+    assert(gpu.enqueueGp0(1u | (1u << 16)));
+    assert(gpu.gp0FifoSize() == 3u);
+    assert(vram.readPixel(896u, 400u, pixel) && pixel == 0u);
+    assert(gpu.serviceGp0Fifo(2u) == 2u);
+    assert(gpu.gp0FifoSize() == 1u);
+    assert(vram.readPixel(896u, 400u, pixel) && pixel == 0u);
+    assert(gpu.serviceGp0Fifo(1u) == 1u);
+    assert(gpu.gp0FifoSize() == 0u);
+    assert(vram.readPixel(896u, 400u, pixel) && pixel == 0x001Fu);
+    assert(gpu.serviceGp0Fifo(4u) == 0u);
+
     // Bounded GP0 FIFO primitive: capacity, overflow, ordering and wraparound.
     GpuFifo fifo;
     assert(fifo.empty());
