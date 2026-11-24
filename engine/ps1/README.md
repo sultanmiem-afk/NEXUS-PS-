@@ -9,6 +9,9 @@ an early portable interpreter and CP0 foundation.
 - HI/LO registers and PC/next-PC state.
 - MIPS instruction field decoder and reset-vector initialization.
 - Bus interface for the future PS1 memory subsystem.
+- 2 MiB main RAM device with little-endian byte/halfword/word access.
+- RAM address decoding for the 8 MiB physical mirror window and KSEG0/KSEG1 aliases.
+- RAM clear/reset support and separate-device rejection for scratchpad/BIOS addresses.
 - Integer shifts, arithmetic/logical operations, comparisons, multiply/divide,
   jumps, immediate operations, and byte/halfword/word memory access.
 - Conditional branches including BEQ, BNE, BLEZ, BGTZ, BLTZ, and BGEZ.
@@ -20,7 +23,7 @@ an early portable interpreter and CP0 foundation.
 - MFC0, MTC0, and RFE instruction handling.
 - Initial exception entry for syscall, breakpoint, reserved instruction,
   arithmetic overflow, and misaligned instruction/data addresses.
-- Initial CMake build target and unit tests for arithmetic, branch delay, and load-delay hazards.
+- Initial CMake build target and unit tests for arithmetic, branch delay, load-delay hazards, and RAM mapping/access.
 - GitHub Actions workflow to compile the CPU target and run its tests.
 
 ## Important accuracy limits
@@ -36,7 +39,7 @@ The current unit tests are only a small initial test set.
 
 1. Expand load-delay tests across every load opcode, including LWL/LWR and load-to-zero.
 2. Validate exception and branch-delay edge cases.
-3. Connect the CPU to PS1 RAM, BIOS, scratchpad, and memory-mapped I/O.
+3. Add the memory bus, then connect RAM, BIOS, scratchpad, and memory-mapped I/O to the CPU.
 4. Add interrupt/timer/DMA interactions and improve timing accuracy.
 5. Profile on Android before considering a dynamic recompiler.
 
