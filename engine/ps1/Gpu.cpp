@@ -26,7 +26,7 @@ void Gpu::reset() noexcept {
     verticalRange_ = 0x3FC10u;
     displayMode_ = 0;
     gpuClockRemainder_ = 0;
-    gp0ServiceRemainder_ = 0;
+    gp0ServiceCycleRemainder_ = 0;
     scanlineClock_ = 0;
     scanline_ = 0;
     dotClockRemainder_ = 0;
@@ -39,21 +39,24 @@ void Gpu::reset() noexcept {
 
 GpuTimingEvents Gpu::advanceTiming(std::uint32_t cpuCycles) noexcept {
     GpuTimingEvents events{};
-    // The 11:7 clock ratio models the NTSC GPU/CPU domains. Scanout is still
-    // simplified: PAL clocking, exact line totals and fractional blanking
-    // boundaries are not yet modeled.
+    // Approximate NTSC scanout clock domains: one modeled scanline is 3413
+    // GPU clocks and a frame contains 263 lines (314 in PAL mode). This is a
+    // timing counter, not a per-pixel renderer or cycle-accurate bus model.
     constexpr std::uint32_t kGpuClocksPerCpuNumerator = 11u;
     constexpr std::uint32_t kGpuClocksPerCpuDenominator = 7u;
     constexpr std::uint32_t kGpuClocksPerScanline = 3413u;
+    constexpr std::uint32_t kGp0CpuCyclesPerWord = 10u;
     const std::uint32_t linesPerFrame = (displayMode_ & (1u << 3)) ? 314u : 263u;
     const std::uint32_t scaled = gpuClockRemainder_ +
         cpuCycles * kGpuClocksPerCpuNumerator;
     const std::uint32_t gpuClocks = scaled / kGpuClocksPerCpuDenominator;
-    // Simplified GP0 command-port throughput: one FIFO word per two GPU clocks.
-    // Keep the half-rate phase across CPU steps so small steps do not lose credits.
-    const std::uint32_t serviceScaled = gp0ServiceRemainder_ + gpuClocks;
-    events.gp0ServiceWords = serviceScaled / 2u;
-    gp0ServiceRemainder_ = serviceScaled % 2u;
+
+    // Fixed approximate GP0 budget: one queued word per 10 CPU cycles.
+    // Retain fractional cycle budget between CPU steps; no GPU opcode cost
+    // table or cycle-by-cycle PS1 bus arbitration is attempted.
+    const std::uint32_t serviceScaled = gp0ServiceCycleRemainder_ + cpuCycles;
+    events.gp0ServiceWords = serviceScaled / kGp0CpuCyclesPerWord;
+    gp0ServiceCycleRemainder_ = serviceScaled % kGp0CpuCyclesPerWord;
     gpuClockRemainder_ = scaled % kGpuClocksPerCpuDenominator;
 
     const std::uint32_t horizontalMode = displayMode_ & 3u;
