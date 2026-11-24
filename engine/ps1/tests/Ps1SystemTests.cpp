@@ -357,5 +357,122 @@ int main() {
     assert(!system.loadBios(std::vector<std::uint8_t>(32, 0)));
     system.reset(0x00000000u);
     assert(system.memory().bios().loaded());
+
+    // Full CPU/RAM/GPU/DMA integration through KSEG1 MMIO.
+    // The CPU writes BIOS probe registers, submits a GP0 fill through the GPU FIFO,
+    // programs GP1 display timing, and continuously samples GPUSTAT via GP1.
+    system.reset(0x00000000u);
+    std::vector<std::uint32_t> integrationProgram;
+    auto emit = [&](std::uint32_t instruction) { integrationProgram.push_back(instruction); };
+    emit(0x3C01BF80u); // LUI r1, BF80: KSEG1 MMIO base.
+    emit(0x34211000u); // ORI r1, r1, 1000.
+    emit(0x3C02A000u); // LUI r2, A000: poison-looking value for BIOS probes.
+    for (std::uint16_t offset = 0; offset <= 0x20u; offset += 4u)
+        emit(iType(0x2Bu, 1u, 2u, offset)); // SW r2, offset(r1): ignored, no BusFault.
+    emit(0x34211810u); // r1 = BF801810 (GP0).
+    emit(0x3C020200u); // GP0 fill command 020000FF.
+    emit(0x344200FFu);
+    emit(iType(0x2Bu, 1u, 2u, 0u));
+    emit(0x24020000u); // XY=(0,0).
+    emit(iType(0x2Bu, 1u, 2u, 0u));
+    emit(0x3C020001u); // 1x1 dimensions.
+    emit(0x34420001u);
+    emit(iType(0x2Bu, 1u, 2u, 0u));
+    emit(0x34210004u); // r1 = BF801814 (GPUSTAT/GP1).
+    emit(0x3C020800u); // GP1(08): display mode 45h.
+    emit(0x34420045u);
+    emit(iType(0x2Bu, 1u, 2u, 0u));
+    emit(0x3C020700u); // GP1(07): VBlank interval [0,2).
+    emit(0x34420800u);
+    emit(iType(0x2Bu, 1u, 2u, 0u));
+    emit(iType(0x23u, 1u, 4u, 0u)); // LW r4, 0(r1): CPU reads GPUSTAT.
+    emit(0u);                       // MIPS load delay slot.
+    emit(iType(0x2Bu, 0u, 4u, 0x0200u)); // Save initial status.
+    emit(0u);
+    const std::size_t statusLoop = integrationProgram.size();
+    emit(iType(0x23u, 1u, 4u, 0u)); // Repeated CPU GPUSTAT read via KSEG1.
+    emit(0u);
+    emit(iType(0x2Bu, 0u, 4u, 0x0204u)); // Store latest status snapshot in RAM.
+    emit((0x02u << 26u) | static_cast<std::uint32_t>(statusLoop)); // J statusLoop.
+    emit(0u); // Jump delay slot.
+    for (std::size_t i = 0; i < integrationProgram.size(); ++i)
+        putWord(system.memory().ram(), static_cast<std::uint32_t>(i * 4u), integrationProgram[i]);
+
+    for (std::size_t i = 0; i < integrationProgram.size() + 6u; ++i)
+        assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert(system.gpu().gp0FifoSize() == 0u);
+    std::uint16_t integratedPixel = 0u;
+    assert(system.vram().readPixel(0u, 0u, integratedPixel) && integratedPixel == 0x001Fu);
+    std::uint32_t initialGpuStatus = 0u;
+    assert(system.memory().ram().read32(0x0200u, initialGpuStatus));
+    assert(((initialGpuStatus >> 16u) & 0x7Fu) == 0x0Fu); // GPUSTAT bits 16-22.
+    assert((initialGpuStatus & (1u << 31u)) == 0u);
+
+    // VBlank I_STAT bit 0 must pulse once per frame; GPUSTAT bit 31 alternates
+    // at each frame boundary. The CPU itself reads GPUSTAT in its RAM-storing loop.
+    std::uint32_t observedVblankFrames = 0u;
+    for (std::uint64_t step = 0; step < 1500000u && observedVblankFrames < 3u; ++step) {
+        assert(system.step().cpu.status == CpuStepStatus::Executed);
+        std::uint32_t interruptStatus = 0u;
+        assert(system.memory().read32(InterruptController::kStatusAddress, interruptStatus));
+        if ((interruptStatus & 1u) == 0u) continue;
+        ++observedVblankFrames;
+        for (unsigned settle = 0; settle < 8u; ++settle)
+            assert(system.step().cpu.status == CpuStepStatus::Executed);
+        std::uint32_t sampledStatus = 0u;
+        assert(system.memory().ram().read32(0x0204u, sampledStatus));
+        assert(((sampledStatus >> 16u) & 0x7Fu) == 0x0Fu);
+        const bool expectedOddField = observedVblankFrames == 2u;
+        assert(((sampledStatus >> 31u) & 1u) == (expectedOddField ? 1u : 0u));
+        assert(system.memory().write32(InterruptController::kStatusAddress, ~1u));
+        assert(system.memory().read32(InterruptController::kStatusAddress, interruptStatus));
+        assert((interruptStatus & 1u) == 0u);
+    }
+    assert(observedVblankFrames == 3u);
+
+    // DMA channel 2: RAM -> GP0 -> VRAM. A000 in the pixel payload is data,
+    // not a command; FIFO processing must preserve the complete image packet.
+    const std::uint32_t uploadWords[] = {
+        0xA0000000u,              // GP0(A0) image upload command.
+        400u | (400u << 16u),     // Destination.
+        2u | (2u << 16u),         // 2x2 pixels.
+        0xA0001111u,              // Poison-looking pixel payload.
+        0x22223333u
+    };
+    for (std::size_t i = 0; i < 5u; ++i)
+        assert(system.memory().ram().write32(0x1000u + static_cast<std::uint32_t>(i * 4u),
+                                             uploadWords[i]));
+    assert(system.memory().write32(0xBF8010F0u, 1u << 11u)); // Enable GPU DMA.
+    assert(system.memory().write32(0xBF8010F4u, (1u << 23u) | (1u << 18u)));
+    assert(system.memory().write32(0xBF8010A0u, 0x1000u)); // Channel 2 MADR.
+    assert(system.memory().write32(0xBF8010A4u, 5u));      // Manual word count.
+    assert(system.memory().write32(0xBF8010A8u, 0x11000001u)); // To GPU + START + TRIGGER.
+    const auto integratedUpload = system.step();
+    assert(integratedUpload.cpu.status == CpuStepStatus::Executed);
+    assert(integratedUpload.dmaTransferred && integratedUpload.dmaWords == 5u);
+    assert(system.vram().readPixel(400u, 400u, integratedPixel) && integratedPixel == 0x1111u);
+    assert(system.vram().readPixel(401u, 400u, integratedPixel) && integratedPixel == 0xA000u);
+    assert(system.vram().readPixel(400u, 401u, integratedPixel) && integratedPixel == 0x3333u);
+    assert(system.vram().readPixel(401u, 401u, integratedPixel) && integratedPixel == 0x2222u);
+
+    // GPU -> RAM through DMA channel 2, using GP0(C0) readback and the same VRAM.
+    system.gpu().writeGp0(0xC0000000u);
+    system.gpu().writeGp0(400u | (400u << 16u));
+    system.gpu().writeGp0(2u | (2u << 16u));
+    assert(system.memory().write32(0xBF8010A0u, 0x1200u));
+    assert(system.memory().write32(0xBF8010A4u, 2u));
+    assert(system.memory().write32(0xBF8010A8u, 0x11000000u)); // From GPU + START + TRIGGER.
+    const auto integratedReadback = system.step();
+    assert(integratedReadback.cpu.status == CpuStepStatus::Executed);
+    assert(integratedReadback.dmaTransferred && integratedReadback.dmaWords == 2u);
+    std::uint32_t readbackWord = 0u;
+    assert(system.memory().ram().read32(0x1200u, readbackWord) && readbackWord == 0xA0001111u);
+    assert(system.memory().ram().read32(0x1204u, readbackWord) && readbackWord == 0x22223333u);
+
+    // The CPU/GPU/DMA integration also latches the DMA interrupt source.
+    std::uint32_t integratedIstat = 0u;
+    assert(system.memory().read32(InterruptController::kStatusAddress, integratedIstat));
+    assert((integratedIstat & (1u << 3u)) != 0u);
+
     return 0;
 }
