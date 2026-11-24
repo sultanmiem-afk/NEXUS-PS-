@@ -26,6 +26,8 @@ public:
         bool adpcmBlockValid = false;
         bool adpcmEnd = false;
         bool adpcmRepeat = false;
+        std::uint16_t currentAddress = 0;
+        std::uint8_t sampleIndex = 0;
     };
 
     Spu() noexcept { reset(); }
@@ -45,6 +47,8 @@ public:
                           std::int32_t& history1, std::int32_t& history2,
                           bool& endFlag, bool& repeatFlag) const noexcept;
     bool voiceSamples(std::size_t index, std::array<std::int16_t, 28>& samples) const noexcept;
+    // Returns the next decoded sample; false means the voice has stopped or is invalid.
+    bool nextVoiceSample(std::size_t index, std::int16_t& sample) noexcept;
 
     bool readRam8(std::uint32_t address, std::uint8_t& value) const noexcept;
     bool readRam16(std::uint32_t address, std::uint16_t& value) const noexcept;
