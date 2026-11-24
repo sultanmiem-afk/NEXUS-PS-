@@ -6,6 +6,10 @@ add_library(nexus_ps1_cpu
     CpuCore.cpp
     Cop0.cpp
     Ram.cpp
+    Scratchpad.cpp
+    BiosRom.cpp
+    Vram.cpp
+    MemoryBus.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(nexus_ps1_cpu PUBLIC cxx_std_17)
@@ -20,4 +24,12 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_ram_tests tests/RamTests.cpp)
     target_link_libraries(nexus_ps1_ram_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_ram_tests COMMAND nexus_ps1_ram_tests)
+
+    add_executable(nexus_ps1_memory_tests tests/MemoryBusTests.cpp)
+    target_link_libraries(nexus_ps1_memory_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_memory_tests COMMAND nexus_ps1_memory_tests)
+
+    add_executable(nexus_ps1_bios_vram_tests tests/BiosVramTests.cpp)
+    target_link_libraries(nexus_ps1_bios_vram_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_bios_vram_tests COMMAND nexus_ps1_bios_vram_tests)
 endif()
