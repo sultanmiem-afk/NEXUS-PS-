@@ -35,6 +35,49 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::Executed);
     assert(system.cpu().state().gpr[2] == 50u);
 
+    // CPU can write/read SPU voice registers through 16-bit MMIO.
+    system.reset(0x00000000u);
+    putWord(system.memory().ram(), 0, 0x3C011F80u); // LUI r1, 1F80
+    putWord(system.memory().ram(), 4, 0x34211C00u); // ORI r1, r1, 1C00 (SPU)
+    putWord(system.memory().ram(), 8, 0x34021234u); // ORI r2, r0, 1234
+    putWord(system.memory().ram(), 12, iType(0x29u, 1u, 2u, 0u)); // SH r2, 0(r1)
+    putWord(system.memory().ram(), 16, iType(0x25u, 1u, 3u, 0u)); // LHU r3, 0(r1)
+    for (int i = 0; i < 5; ++i) assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert(system.cpu().state().gpr[3] == 0x1234u);
+    std::uint16_t spuVoiceVolume = 0;
+    assert(system.memory().spu().readRegister16(0u, spuVoiceVolume));
+    assert(spuVoiceVolume == 0x1234u);
+
+    // CPU SH/LHU accesses I_STAT, I_MASK and all three timer register banks.
+    system.reset(0x00000000u);
+    system.memory().interrupts().request(1u << 4);
+    putWord(system.memory().ram(), 0, 0x3C011F80u);
+    putWord(system.memory().ram(), 4, 0x34211070u); // I_STAT
+    putWord(system.memory().ram(), 8, iType(0x25u, 1u, 2u, 0u)); // LHU I_STAT
+    putWord(system.memory().ram(), 12, 0x3C031F80u);
+    putWord(system.memory().ram(), 16, 0x34631074u); // I_MASK
+    putWord(system.memory().ram(), 20, 0x34040010u);
+    putWord(system.memory().ram(), 24, iType(0x29u, 3u, 4u, 0u)); // SH I_MASK
+    putWord(system.memory().ram(), 28, iType(0x25u, 3u, 5u, 0u)); // LHU I_MASK
+    putWord(system.memory().ram(), 32, 0x3C061F80u);
+    putWord(system.memory().ram(), 36, 0x34C61108u); // Timer 0 target
+    putWord(system.memory().ram(), 40, 0x34070033u);
+    putWord(system.memory().ram(), 44, iType(0x29u, 6u, 7u, 0u)); // SH target
+    putWord(system.memory().ram(), 48, iType(0x25u, 6u, 8u, 0u)); // LHU target
+    for (int i = 0; i < 13; ++i) assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert(system.cpu().state().gpr[2] == (1u << 4));
+    assert(system.cpu().state().gpr[5] == (1u << 4));
+    assert(system.cpu().state().gpr[8] == 0x33u);
+
+    // CP0 reset enables BEV; exceptions use the bootstrap vector until software clears it.
+    system.reset(0x00000000u);
+    assert((system.cpu().cop0().read(Cop0::kStatus) & Cop0::kStatusBev) != 0u);
+    system.memory().interrupts().request(1u << 0);
+    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 0));
+    system.cpu().cop0().write(Cop0::kStatus, Cop0::kStatusBev | 1u | (1u << 10));
+    assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(system.cpu().state().pc == 0xBFC00180u);
+
     // The CPU writes a complete GP0 fill-rectangle packet through MMIO.
     system.reset(0x00000000u);
     putWord(system.memory().ram(), 0, 0x3C011F80u); // LUI r1, 1F80
