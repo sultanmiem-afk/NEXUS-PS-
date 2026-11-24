@@ -85,5 +85,35 @@ int main() {
         assert(cpu.state().pc == 4);
         assert(cpu.state().next_pc == 12);
     }
+    {
+        TestBus bus;
+        CpuCore cpu(bus);
+        cpu.reset(0);
+        cpu.state().gpr[1] = 0x100;
+        cpu.state().gpr[2] = 7;
+        assert(bus.write32(0x100, 0x12345678u));
+        put(bus, 0, i_type(0x23, 1, 2, 0)); // LW r2, 0(r1)
+        put(bus, 4, i_type(0x09, 2, 3, 1)); // ADDIU r3, r2, 1 (sees old r2)
+        put(bus, 8, i_type(0x09, 2, 4, 0)); // ADDIU r4, r2, 0 (sees loaded value)
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2] == 7); // load is still pending
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3] == 8); // delay instruction read old r2
+        assert(cpu.state().gpr[2] == 0x12345678u); // load commits after operand read
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().gpr[4] == 0x12345678u);
+    }
+    {
+        TestBus bus;
+        CpuCore cpu(bus);
+        cpu.reset(0);
+        cpu.state().gpr[1] = 0x100;
+        assert(bus.write32(0x100, 0xAABBCCDDu));
+        put(bus, 0, i_type(0x23, 1, 2, 0)); // LW r2, 0(r1)
+        put(bus, 4, i_type(0x09, 0, 2, 9)); // ADDIU r2, r0, 9
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2] == 9); // following instruction's write wins
+    }
     return 0;
 }
