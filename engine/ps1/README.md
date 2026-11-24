@@ -20,7 +20,7 @@ an early portable interpreter and CP0 foundation.
 - MFC0, MTC0, and RFE instruction handling.
 - Initial exception entry for syscall, breakpoint, reserved instruction,
   arithmetic overflow, and misaligned instruction/data addresses.
-- Initial CMake build target and unit tests for arithmetic and branch delay.
+- Initial CMake build target and unit tests for arithmetic, branch delay, and load-delay hazards.
 - GitHub Actions workflow to compile the CPU target and run its tests.
 
 ## Important accuracy limits
@@ -34,7 +34,7 @@ The current unit tests are only a small initial test set.
 
 ## Next milestones
 
-1. Expand tests for load-delay hazards, writes to the same destination, and load-to-zero.
+1. Expand load-delay tests across every load opcode, including LWL/LWR and load-to-zero.
 2. Validate exception and branch-delay edge cases.
 3. Connect the CPU to PS1 RAM, BIOS, scratchpad, and memory-mapped I/O.
 4. Add interrupt/timer/DMA interactions and improve timing accuracy.
