@@ -97,3 +97,10 @@ complete 32-bit words from the CD-ROM data FIFO into RAM, updates MADR, and
 sets the channel 3 DICR completion flag. This is a synchronous approximation:
 request pacing, partial block continuation, DMA arbitration and precise CD-ROM
 DMA timing still need work. It does not imply BIOS/game boot compatibility.
+
+
+The initial command model also covers Setfilter/Getparam, GetTN/GetTD,
+GetlocL/GetlocP and a coarse SeekL response. Setmode bit 7 selects an
+approximate double-speed sector interval. These responses are useful for
+incremental BIOS protocol testing, but command timing, seek mechanics, status
+bits, interrupt queuing and several less-common commands remain incomplete.
