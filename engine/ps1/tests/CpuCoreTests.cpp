@@ -308,10 +308,10 @@ int main() {
     }
     {
         TestBus bus; CpuCore cpu(bus); cpu.reset(0);
-        cpu.cop0().write(Cop0::kStatus, 0x15u);
+        cpu.cop0().write(Cop0::kStatus, 0x2Bu);
         put(bus, 0, 0x42000010u); // RFE
         assert(cpu.step().status == CpuStepStatus::Executed);
-        assert(cpu.cop0().read(Cop0::kStatus) == 0x05u);
+        assert(cpu.cop0().read(Cop0::kStatus) == 0x2Au);
     }
     // Nonzero reserved fields in MFC0/MTC0/RFE encodings are RI exceptions.
     {
