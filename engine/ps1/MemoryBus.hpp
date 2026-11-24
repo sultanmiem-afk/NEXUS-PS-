@@ -3,6 +3,7 @@
 #include "BiosRom.hpp"
 #include "CpuCore.hpp"
 #include "DmaController.hpp"
+#include "InterruptController.hpp"
 #include "Ram.hpp"
 #include "Scratchpad.hpp"
 
@@ -20,6 +21,8 @@ public:
     const Scratchpad& scratchpad() const noexcept { return scratchpad_; }
     DmaController& dma() noexcept { return dma_; }
     const DmaController& dma() const noexcept { return dma_; }
+    InterruptController& interrupts() noexcept { return interrupts_; }
+    const InterruptController& interrupts() const noexcept { return interrupts_; }
     BiosRom& bios() noexcept { return bios_; }
     const BiosRom& bios() const noexcept { return bios_; }
 
@@ -37,6 +40,7 @@ private:
     Scratchpad scratchpad_{};
     BiosRom bios_{};
     DmaController dma_{};
+    InterruptController interrupts_{};
 };
 
 } // namespace nexus::ps1
