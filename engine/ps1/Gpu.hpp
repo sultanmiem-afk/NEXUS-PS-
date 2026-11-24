@@ -8,6 +8,11 @@
 
 namespace nexus::ps1 {
 
+struct GpuTimingEvents {
+    std::uint32_t dotClockTicks = 0;
+    std::uint32_t hBlankPulses = 0;
+};
+
 // Early GP0/GP1 command processor. This is a functional subset, not a
 // cycle-accurate GPU or a complete polygon rasterizer.
 class Gpu {
@@ -19,6 +24,8 @@ public:
     std::uint32_t readGp0();
     void writeGp1(std::uint32_t value) noexcept;
     std::uint32_t readStatus() const noexcept;
+    // Approximate display timing driven by CPU-cycle estimates (NTSC-like ratio).
+    GpuTimingEvents advanceTiming(std::uint32_t cpuCycles) noexcept;
 
     bool irqPending() const noexcept { return irqPending_; }
     std::size_t unsupportedCommandCount() const noexcept {
@@ -46,6 +53,9 @@ private:
     std::uint32_t horizontalRange_ = 0xC60260u;
     std::uint32_t verticalRange_ = 0x3FC10u;
     std::uint32_t displayMode_ = 0;
+    std::uint32_t gpuClockRemainder_ = 0;
+    std::uint32_t scanlineClock_ = 0;
+    std::uint32_t dotClockRemainder_ = 0;
     std::uint32_t drawMode_ = 0;
     std::uint32_t textureWindow_ = 0;
     std::uint32_t drawAreaTopLeft_ = 0;
