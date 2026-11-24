@@ -6,6 +6,7 @@
 #include "Vram.hpp"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace nexus::ps1 {
