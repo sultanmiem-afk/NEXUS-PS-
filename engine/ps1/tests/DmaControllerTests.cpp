@@ -73,6 +73,18 @@ int main() {
     assert(ram.read32(0x200u, value) && value == 0x22221111u);
     assert(dma.lastTransferWords() == 1u);
 
+    // Linked-list mode streams a GP0 packet from a RAM DMA list.
+    assert(ram.write32(0x300u, 0x03FFFFFFu)); // Three words, end-of-list.
+    assert(ram.write32(0x304u, 0x020000FFu)); // GP0 fill rectangle, red.
+    assert(ram.write32(0x308u, 0x00000000u)); // X=0, Y=0.
+    assert(ram.write32(0x30Cu, 0x00010001u)); // 1x1 (hardware aligns fill width).
+    assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x300u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x01000401u));
+    assert(dma.executeGpuTransfer(ram, gpu));
+    assert(vram.readPixel(0, 0, pixel) && pixel == 31u);
+    assert(dma.lastTransferWords() == 3u);
+    assert(dma.base(2) == 0x00FFFFFFu);
+
     dma.reset();
     assert(dma.read32(DmaController::kDpcrAddress, value) && value == 0x07654321u);
     assert(dma.read32(DmaController::kBaseAddress, value) && value == 0u);
