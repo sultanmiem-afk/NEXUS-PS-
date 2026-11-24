@@ -216,6 +216,35 @@ int main() {
     gpu.writeGp0(310u | (305u << 16));
     assert(vram.readPixel(305, 303, pixel) && pixel == 0x001Fu);
 
+    // Flat semi-transparent line 0x42.
+    gpu.writeGp0(0xE1000000u); // Blend mode 0: average.
+    vram.writePixel(330u, 300u, 0x001Fu);
+    gpu.writeGp0(0x4200FF00u);
+    gpu.writeGp0(330u | (300u << 16));
+    gpu.writeGp0(334u | (300u << 16));
+    assert(vram.readPixel(332u, 300u, pixel) && pixel == 0x3DE0u);
+
+    // Gouraud line interpolation; A0000000 is packet data, not a transfer command.
+    gpu.writeGp0(0x50000000u);
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(400u | (300u << 16));
+    gpu.writeGp0(0x000000FFu);
+    gpu.writeGp0(404u | (300u << 16));
+    assert(vram.readPixel(404u, 300u, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(402u, 300u, pixel) && pixel != 0u && pixel != 0x001Fu);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(500u | (300u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(500u, 300u, pixel) && pixel == 0x001Fu);
+
+    // Gouraud semi-transparent line 0x52.
+    vram.writePixel(510u, 300u, 0x001Fu);
+    gpu.writeGp0(0x5200FF00u);
+    gpu.writeGp0(510u | (300u << 16));
+    gpu.writeGp0(0x0000FF00u);
+    gpu.writeGp0(514u | (300u << 16));
+    assert(vram.readPixel(512u, 300u, pixel) && pixel == 0x3DE0u);
+
     gpu.writeGp0(0xA0000000u);
     gpu.writeGp0(30u | (40u << 16));
     gpu.writeGp0(2u | (2u << 16));
@@ -465,14 +494,14 @@ int main() {
     const std::uint8_t unsupportedOpcodes[] = {
         0x21u, 0x22u, 0x23u, 0x2Au, 0x32u, 0x3Au,
         0x34u, 0x35u, 0x36u, 0x37u, 0x3Cu, 0x3Du, 0x3Eu, 0x3Fu,
-        0x42u, 0x50u, 0x52u, 0x80u
+        0x80u
     };
     const std::size_t unsupportedLengths[] = {
         4u, 4u, 4u, 5u, 6u, 8u,
         9u, 9u, 9u, 9u, 12u, 12u, 12u, 12u,
-        3u, 4u, 4u, 4u
+        4u
     };
-    for (std::size_t command = 0; command < 18u; ++command) {
+    for (std::size_t command = 0; command < 15u; ++command) {
         gpu.reset();
         gpu.writeGp0(static_cast<std::uint32_t>(unsupportedOpcodes[command]) << 24u);
         for (std::size_t word = 1u; word < unsupportedLengths[command]; ++word)
