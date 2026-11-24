@@ -53,3 +53,8 @@ Added experimental GP0(30h) Gouraud-shaded triangle and GP0(38h) Gouraud-shaded 
 ### Initial textured polygon support
 
 Added experimental GP0(24h) textured triangle and GP0(2Ch) textured quad handling for 15-bit direct-color texture pages, including affine UV interpolation, texture-window coordinate masking, transparent texel skip, and draw-area clipping. Indexed 4-bit/8-bit CLUT texture modes, modulation, semi-transparency, dithering, and exact hardware rasterization rules remain unsupported and need dedicated tests.
+
+
+### Indexed texture/CLUT support (experimental)
+
+Extended textured triangle/quad sampling to indexed 4-bit and 8-bit texture pages. The sampler extracts packed indices from VRAM words and resolves them through the packet CLUT coordinates; zero texels remain transparent. Added focused 4-bit and 8-bit CLUT tests. Perspective correction, texture modulation, semi-transparency, dithering, exact hardware edge rules, and timing remain unimplemented.
