@@ -278,10 +278,11 @@ int main() {
     assert((status & (1u << 28)) != 0);
     assert(((status >> 29) & 3u) == 2u);
 
-    // An incomplete polygon packet is not ready for another command/DMA block.
+    // An incomplete polygon packet can still accept GP0 words while FIFO has space,
+    // but it is not ready for a new DMA block.
     gpu.writeGp0(0x200000FFu);
     status = gpu.readStatus();
-    assert((status & (1u << 26)) == 0);
+    assert((status & (1u << 26)) != 0);
     assert((status & (1u << 28)) == 0);
     assert((status & (1u << 25)) == 0);
     gpu.writeGp0(10u | (10u << 16));
@@ -291,6 +292,17 @@ int main() {
     assert((status & (1u << 26)) != 0);
     assert((status & (1u << 28)) != 0);
     assert((status & (1u << 25)) != 0);
+
+    // FIFO-full backpressure clears GP0 write readiness and recovers on service.
+    gpu.reset();
+    for (std::size_t i = 0; i < GpuFifo::kCapacity; ++i)
+        assert(gpu.enqueueGp0(0x00000000u));
+    status = gpu.readStatus();
+    assert((status & (1u << 26)) == 0);
+    assert(gpu.serviceGp0Fifo(1u) == 1u);
+    status = gpu.readStatus();
+    assert((status & (1u << 26)) != 0);
+    gpu.reset();
 
     // CPU-to-VRAM transfer blocks command/DMA readiness until its data arrives.
     gpu.writeGp0(0xA0000000u);
