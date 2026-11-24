@@ -46,6 +46,24 @@ int main() {
     assert(pixel != 0x001Fu && pixel != 0x03E0u && pixel != 0x7C00u);
     assert((pixel & 0x7FFFu) != 0);
 
+    // GP0(E1) bit 9 enables the PS1 4x4 dithering matrix for Gouraud polygons.
+    gpu.writeGp0(0xE1000000u); // dithering disabled
+    gpu.writeGp0(0x30000080u);
+    gpu.writeGp0(100u | (100u << 16));
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(120u | (100u << 16));
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(100u | (120u << 16));
+    assert(vram.readPixel(105u, 105u, pixel) && pixel == 0x4210u);
+
+    gpu.writeGp0(0xE1000200u); // enable dithering (E1 bit 9)
+    gpu.writeGp0(0x30000080u);
+    gpu.writeGp0(100u | (100u << 16));
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(120u | (100u << 16));
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(100u | (120u << 16));
+    assert(vram.readPixel(105u, 105u, pixel) && pixel == 0x3DEFu);
 
     // 15-bit textured triangle samples texels from a configured texture page.
     vram.writePixel(0, 0, 0x7C00u);
