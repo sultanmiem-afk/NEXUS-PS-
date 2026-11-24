@@ -50,7 +50,7 @@ int main() {
     // 15-bit textured triangle samples texels from a configured texture page.
     vram.writePixel(0, 0, 0x7C00u);
     gpu.writeGp0(0xE1000200u); // 15-bit texture page mode.
-    gpu.writeGp0(0x24000000u);
+    gpu.writeGp0(0x26000000u); // raw texture: isolate page sampling.
     gpu.writeGp0(400u | (100u << 16));
     gpu.writeGp0(0u);
     gpu.writeGp0(420u | (100u << 16));
@@ -63,7 +63,7 @@ int main() {
     // 4-bit indexed texture: nibble index resolves through a 16-color CLUT.
     vram.writePixel(0, 0, 0x0003u); // pixel index 3 in low nibble.
     vram.writePixel(3, 1, 0x03E0u);  // CLUT entry 3.
-    gpu.writeGp0(0x24000000u);
+    gpu.writeGp0(0x24808080u); // neutral modulation for indexed texture.
     gpu.writeGp0(500u | (100u << 16));
     gpu.writeGp0(0u | (1u << 16)); // CLUT X=0, Y=1.
     gpu.writeGp0(520u | (100u << 16));
@@ -75,7 +75,7 @@ int main() {
     // 8-bit indexed texture: byte index resolves through its CLUT.
     vram.writePixel(0, 0, 0x002Au); // low byte index 42.
     vram.writePixel(42, 2, 0x7C00u);  // CLUT entry 42.
-    gpu.writeGp0(0x24000000u);
+    gpu.writeGp0(0x24808080u); // neutral modulation for indexed texture.
     gpu.writeGp0(550u | (100u << 16));
     gpu.writeGp0(0u | (2u << 16)); // CLUT Y=2.
     gpu.writeGp0(570u | (100u << 16));
