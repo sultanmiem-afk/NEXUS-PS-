@@ -204,6 +204,17 @@ void Cdrom::produceSector() noexcept {
     raiseInterrupt(kIrqDataReady);
 }
 
+bool Cdrom::readDataWord(std::uint32_t& value) noexcept {
+    if (data_.size() < 4u) return false;
+    value = 0u;
+    for (unsigned byte = 0; byte < 4u; ++byte) {
+        value |= static_cast<std::uint32_t>(data_.front()) << (byte * 8u);
+        data_.pop_front();
+    }
+    if (data_.empty()) dataReady_ = false;
+    return true;
+}
+
 void Cdrom::advance(std::uint32_t cpuCycles) noexcept {
     if (!reading_ || !imageLoaded()) return;
     if (!data_.empty()) return;
