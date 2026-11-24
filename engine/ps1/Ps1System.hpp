@@ -40,6 +40,8 @@ public:
     const CpuCore& cpu() const noexcept { return cpu_; }
     MemoryBus& memory() noexcept { return memory_; }
     const MemoryBus& memory() const noexcept { return memory_; }
+    Spu& spu() noexcept { return memory_.spu(); }
+    const Spu& spu() const noexcept { return memory_.spu(); }
     Gpu& gpu() noexcept { return gpu_; }
     const Gpu& gpu() const noexcept { return gpu_; }
     Vram& vram() noexcept { return vram_; }
