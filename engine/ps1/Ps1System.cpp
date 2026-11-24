@@ -26,11 +26,11 @@ SystemStepResult Ps1System::step() {
     SystemStepResult result{};
     cpu_.cop0().setHardwareInterruptPending(memory_.interrupts().active());
     result.cpu = cpu_.step();
-    // Drain queued GP0 words at the system-step boundary, after the CPU bus
-    // transaction. DMA's synchronous client also enqueues through the same FIFO.
-    gpu_.serviceGp0Fifo(GpuFifo::kCapacity);
-    // Advance the GPU timing domain first so timers observe current blanking state.
+    // Advance GPU clocks, then service only the GP0 FIFO words earned by this
+    // step's modeled GPU time. This is a simplified throughput model, not exact
+    // hardware bus arbitration; fractional service phase is retained by the GPU.
     const GpuTimingEvents gpuTiming = gpu_.advanceTiming(result.cpu.cycles);
+    gpu_.serviceGp0Fifo(gpuTiming.gp0ServiceWords);
     memory_.timer0().setHBlankActive(gpuTiming.hBlankActive);
     memory_.timer1().setVBlankActive(gpuTiming.vBlankActive);
     result.timer0Irq = memory_.timer0().advance(result.cpu.cycles);
