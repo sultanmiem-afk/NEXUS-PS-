@@ -140,5 +140,62 @@ int main() {
         " INDEX 01 00:00:00\n";
     assert(!cueCdrom.loadCue(multiFileCue, "one.bin", image));
 
+    // Expanded command set: GetTN, GetTD, Setfilter/Getparam, GetlocP/GetlocL.
+    Cdrom commandCdrom;
+    assert(commandCdrom.loadCue(cue, "disc.bin", cueBin));
+    commandCdrom.write8(0x1F801801u, 0x13u); // GetTN
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0u);
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0x01u);
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0x02u);
+
+    commandCdrom.write8(0x1F801802u, 0x02u);
+    commandCdrom.write8(0x1F801801u, 0x14u); // GetTD track 2
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0u);
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0u);
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0x02u);
+
+    commandCdrom.write8(0x1F801802u, 0x03u);
+    commandCdrom.write8(0x1F801802u, 0x04u);
+    commandCdrom.write8(0x1F801801u, 0x0Du); // Setfilter
+    commandCdrom.write8(0x1F801801u, 0x0Fu); // Getparam
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0u);
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0u);
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0x03u);
+    assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0x04u);
+
+    commandCdrom.write8(0x1F801802u, 0x00u);
+    commandCdrom.write8(0x1F801802u, 0x02u);
+    commandCdrom.write8(0x1F801802u, 0x02u);
+    commandCdrom.write8(0x1F801801u, 0x02u); // Setloc to disc LBA 2.
+    assert(commandCdrom.read8(0x1F801801u, byte)); // Setloc response
+    commandCdrom.write8(0x1F801801u, 0x11u); // GetlocP
+    const std::uint8_t expectedLocP[] = {0x02u, 0x01u, 0u, 0u, 0u, 0u, 0x02u, 0x02u};
+    for (const std::uint8_t expected : expectedLocP) {
+        assert(commandCdrom.read8(0x1F801801u, byte));
+        assert(byte == expected);
+    }
+    commandCdrom.write8(0x1F801801u, 0x10u); // GetlocL: eight header bytes
+    const std::uint8_t expectedLocL[] = {0u, 0x02u, 0x02u, 0x01u, 0u, 0u, 0u, 0u};
+    for (const std::uint8_t expected : expectedLocL) {
+        assert(commandCdrom.read8(0x1F801801u, byte));
+        assert(byte == expected);
+    }
+
+    // Setmode bit 7 selects the approximate double-speed sector interval.
+    Cdrom fastCdrom;
+    assert(fastCdrom.loadImage(image));
+    fastCdrom.write8(0x1F801802u, 0x80u);
+    fastCdrom.write8(0x1F801801u, 0x0Eu);
+    fastCdrom.read8(0x1F801801u, byte); // discard Setmode response
+    fastCdrom.write8(0x1F801802u, 0x00u);
+    fastCdrom.write8(0x1F801802u, 0x02u);
+    fastCdrom.write8(0x1F801802u, 0x00u);
+    fastCdrom.write8(0x1F801801u, 0x02u);
+    fastCdrom.read8(0x1F801801u, byte); // discard Setloc response
+    fastCdrom.write8(0x1F801801u, 0x06u);
+    fastCdrom.read8(0x1F801801u, byte); // discard ReadN response
+    fastCdrom.advance(Cdrom::kCyclesPerSector / 2u);
+    assert(fastCdrom.dataAvailableBytes() == 2048u);
+
     return 0;
 }
