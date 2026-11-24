@@ -1,5 +1,6 @@
 #include "Spu.hpp"
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 
@@ -103,6 +104,44 @@ int main() {
     // Reverb work-area start is a valid global SPU register.
     assert(spu.writeRegister16(0x1A0u, 0x3456u));
     assert(spu.readRegister16(0x1A0u, reg) && reg == 0x3456u);
+
+
+    // PS1 ADPCM block decoding: 16-byte block -> 28 signed PCM samples.
+    std::array<std::int16_t, 28> decoded{};
+    std::int32_t history1 = 0;
+    std::int32_t history2 = 0;
+    bool endFlag = false;
+    bool repeatFlag = false;
+    assert(spu.writeRam8(0u, 0x0Cu)); // Shift 12, predictor filter 0.
+    assert(spu.writeRam8(1u, 0x03u)); // End + repeat flags.
+    assert(spu.writeRam8(2u, 0xF1u)); // First samples: +1, -1.
+    for (std::uint32_t i = 3u; i < 16u; ++i) assert(spu.writeRam8(i, 0u));
+    assert(spu.decodeAdpcmBlock(0u, decoded, history1, history2, endFlag, repeatFlag));
+    assert(decoded[0] == 1 && decoded[1] == -1);
+    assert(endFlag && repeatFlag);
+    assert(history1 == 0 && history2 == 0);
+
+    // Invalid predictor filters and unaligned/out-of-range blocks are rejected.
+    assert(spu.writeRam8(16u, 0x5Cu)); // Filter 5 is reserved.
+    assert(!spu.decodeAdpcmBlock(16u, decoded, history1, history2, endFlag, repeatFlag));
+    assert(!spu.decodeAdpcmBlock(1u, decoded, history1, history2, endFlag, repeatFlag));
+    assert(!spu.decodeAdpcmBlock(static_cast<std::uint32_t>(Spu::kRamSize - 8u),
+                                 decoded, history1, history2, endFlag, repeatFlag));
+
+    // Key-on loads and decodes the first ADPCM block from the voice start address.
+    spu.reset();
+    assert(spu.writeRam8(0u, 0x0Cu));
+    assert(spu.writeRam8(1u, 0x01u));
+    assert(spu.writeRam8(2u, 0x21u)); // First decoded samples: +1, +2.
+    for (std::uint32_t i = 3u; i < 16u; ++i) assert(spu.writeRam8(i, 0u));
+    assert(spu.writeRegister16(0x000u, 0x3FFFu)); // Voice 0 left volume
+    assert(spu.writeRegister16(0x006u, 0x0000u)); // Start at sound RAM byte 0
+    assert(spu.writeRegister16(0x188u, 0x0001u)); // Key on voice 0
+    Spu::VoiceState decodedVoice{};
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(decodedVoice.keyedOn && decodedVoice.adpcmBlockValid && decodedVoice.adpcmEnd);
+    assert(spu.voiceSamples(0u, decoded));
+    assert(decoded[0] == 1 && decoded[1] == 2);
 
     // Misaligned offsets and addresses outside the SPU map fail.
     assert(!spu.readRegister16(0x001u, reg));
