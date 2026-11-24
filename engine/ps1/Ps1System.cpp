@@ -22,10 +22,15 @@ bool Ps1System::loadBios(const std::vector<std::uint8_t>& image) noexcept {
     return memory_.bios().load(image);
 }
 
+bool Ps1System::loadDiscImage(const std::vector<std::uint8_t>& image) noexcept {
+    return memory_.cdrom().loadImage(image);
+}
+
 SystemStepResult Ps1System::step() {
     SystemStepResult result{};
     cpu_.cop0().setHardwareInterruptPending(memory_.interrupts().active());
     result.cpu = cpu_.step();
+    memory_.cdrom().advance(result.cpu.cycles);
     // Advance GPU clocks, then service only the GP0 FIFO words earned by this
     // step's modeled GPU time. This is a simplified throughput model, not exact
     // hardware bus arbitration; fractional service phase is retained by the GPU.
@@ -49,6 +54,8 @@ SystemStepResult Ps1System::step() {
         memory_.interrupts().request(1u << 5); // I_STAT Timer 1 source
     if (result.timer2Irq)
         memory_.interrupts().request(1u << 6); // I_STAT Timer 2 source
+    if (memory_.cdrom().irqPending())
+        memory_.interrupts().request(1u << 2); // I_STAT CD-ROM source
     result.dmaTransferred = memory_.dma().executeGpuTransfer(memory_.ram(), gpu_);
     if (result.dmaTransferred)
         result.dmaWords = memory_.dma().lastTransferWords();
