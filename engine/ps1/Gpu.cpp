@@ -281,7 +281,10 @@ void Gpu::executePolyline() noexcept {
     }
 
     // Gouraud packet layout: command(color0), XY0, color1, XY1, ...
-    if (packet_.size() < 4u || (packet_.size() & 1u) != 0u) return;
+    // The terminator is in the next XY slot, so the preceding color word
+    // belongs to no vertex and must be discarded.
+    if ((packet_.size() & 1u) != 0u) packet_.pop_back();
+    if (packet_.size() < 4u) return;
     const std::vector<std::uint32_t> polyline = packet_;
     std::vector<std::uint32_t> segment(4u);
     segment[0] = (static_cast<std::uint32_t>(opcode) << 24u) |
