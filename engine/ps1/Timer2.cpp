@@ -17,5 +17,5 @@ bool Timer2::advance(std::uint32_t cycles) noexcept{
  const std::uint32_t ticks=total/8u;dividerPhase_=static_cast<std::uint8_t>(total%8u);return advanceTicks(ticks);
 }
 bool Timer2::read32(std::uint32_t a,std::uint32_t&v) noexcept{if(a==kCounterAddress){v=counter_;return true;}if(a==kModeAddress){v=mode();reachedTarget_=reachedOverflow_=false;return true;}if(a==kTargetAddress){v=target_;return true;}return false;}
-bool Timer2::write32(std::uint32_t a,std::uint32_t v) noexcept{if(a==kCounterAddress){counter_=static_cast<std::uint16_t>(v);return true;}if(a==kModeAddress){mode_=v&0x3FFu;counter_=0;dividerPhase_=0;reachedTarget_=reachedOverflow_=false;irqArmed_=true;irqRequest_=true;return true;}if(a==kTargetAddress){target_=static_cast<std::uint16_t>(v);return true;}return false;}
+bool Timer2::write32(std::uint32_t a,std::uint32_t v) noexcept{if(a==kCounterAddress){counter_=static_cast<std::uint16_t>(v);return true;}if(a==kModeAddress){mode_=v&0x3FFu;counter_=0;dividerPhase_=0;reachedTarget_=reachedOverflow_=false;irqArmed_=true;irqRequest_=true;irqPulseTicks_=0;return true;}if(a==kTargetAddress){target_=static_cast<std::uint16_t>(v);return true;}return false;}
 } // namespace nexus::ps1
