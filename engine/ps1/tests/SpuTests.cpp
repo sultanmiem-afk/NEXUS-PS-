@@ -143,6 +143,43 @@ int main() {
     assert(spu.voiceSamples(0u, decoded));
     assert(decoded[0] == 1 && decoded[1] == 2);
 
+
+    // Sequential playback advances to the next 16-byte block after 28 samples.
+    spu.reset();
+    assert(spu.writeRam8(0u, 0x0Cu));
+    assert(spu.writeRam8(1u, 0x00u));
+    for (std::uint32_t i = 2u; i < 16u; ++i) assert(spu.writeRam8(i, 0x11u));
+    assert(spu.writeRam8(16u, 0x0Cu));
+    assert(spu.writeRam8(17u, 0x01u)); // End on second block.
+    for (std::uint32_t i = 18u; i < 32u; ++i) assert(spu.writeRam8(i, 0x22u));
+    assert(spu.writeRegister16(0x006u, 0u));
+    assert(spu.writeRegister16(0x188u, 1u));
+    std::int16_t nextSample = 0;
+    for (unsigned i = 0; i < 28u; ++i) {
+        assert(spu.nextVoiceSample(0u, nextSample));
+        assert(nextSample == 1);
+    }
+    assert(spu.voiceState(0u, decodedVoice) && decodedVoice.currentAddress == 2u);
+    assert(spu.nextVoiceSample(0u, nextSample) && nextSample == 2);
+    for (unsigned i = 1; i < 28u; ++i) assert(spu.nextVoiceSample(0u, nextSample));
+    assert(spu.voiceState(0u, decodedVoice) && !decodedVoice.keyedOn);
+    assert(!spu.nextVoiceSample(0u, nextSample));
+
+    // End+repeat jumps to the configured repeat address.
+    spu.reset();
+    assert(spu.writeRam8(0u, 0x0Cu));
+    assert(spu.writeRam8(1u, 0x03u));
+    for (std::uint32_t i = 2u; i < 16u; ++i) assert(spu.writeRam8(i, 0x11u));
+    assert(spu.writeRam8(32u, 0x0Cu));
+    assert(spu.writeRam8(33u, 0x01u));
+    for (std::uint32_t i = 34u; i < 48u; ++i) assert(spu.writeRam8(i, 0x33u));
+    assert(spu.writeRegister16(0x00Eu, 4u)); // Repeat address in 8-byte units.
+    assert(spu.writeRegister16(0x006u, 0u));
+    assert(spu.writeRegister16(0x188u, 1u));
+    for (unsigned i = 0; i < 28u; ++i) assert(spu.nextVoiceSample(0u, nextSample));
+    assert(spu.voiceState(0u, decodedVoice) && decodedVoice.currentAddress == 4u);
+    assert(spu.nextVoiceSample(0u, nextSample) && nextSample == 3);
+
     // Misaligned offsets and addresses outside the SPU map fail.
     assert(!spu.readRegister16(0x001u, reg));
     assert(!spu.writeRegister16(0x201u, 0x1234u));
