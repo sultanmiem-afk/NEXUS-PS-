@@ -87,7 +87,9 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         }
         if (opcode == 0x02) expectedWords_ = 3;
         else if (opcode == 0x20) expectedWords_ = 4;
+        else if (opcode == 0x24) expectedWords_ = 7;
         else if (opcode == 0x28) expectedWords_ = 5;
+        else if (opcode == 0x2C) expectedWords_ = 9;
         else if (opcode == 0x30) expectedWords_ = 6;
         else if (opcode == 0x38) expectedWords_ = 8;
         else if (opcode == 0x40) expectedWords_ = 3;
@@ -112,6 +114,8 @@ void Gpu::executePacket() {
         executeFillRectangle();
     } else if (opcode == 0x20 || opcode == 0x28) {
         executeFlatPolygon();
+    } else if (opcode == 0x24 || opcode == 0x2C) {
+        executeTexturedPolygon();
     } else if (opcode == 0x30 || opcode == 0x38) {
         executeGouraudPolygon();
     } else if (opcode == 0x40) {
@@ -210,6 +214,83 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
 }
 
 
+
+
+void Gpu::executeTexturedPolygon() noexcept {
+    const bool quad = static_cast<std::uint8_t>(packet_[0] >> 24) == 0x2C;
+    const int count = quad ? 4 : 3;
+    int x[4]{}, y[4]{}, u[4]{}, v[4]{};
+    std::uint16_t page = 0;
+    const int ox = signExtend11(drawOffset_ & 0x7FFu);
+    const int oy = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    for (int i = 0; i < count; ++i) {
+        const std::size_t xyIndex = 1u + static_cast<std::size_t>(i) * 2u;
+        const std::size_t uvIndex = xyIndex + 1u;
+        const std::uint32_t xy = packet_[xyIndex];
+        const std::uint32_t uv = packet_[uvIndex];
+        x[i] = signExtend11(xy) + ox;
+        y[i] = signExtend11(xy >> 16) + oy;
+        u[i] = static_cast<int>(uv & 0xFFu);
+        v[i] = static_cast<int>((uv >> 8) & 0xFFu);
+        if (i == 1) page = static_cast<std::uint16_t>(uv >> 16);
+    }
+    drawTexturedTriangle(x, y, u, v, page);
+    if (quad) {
+        const int x2[3] = {x[1], x[2], x[3]};
+        const int y2[3] = {y[1], y[2], y[3]};
+        const int u2[3] = {u[1], u[2], u[3]};
+        const int v2[3] = {v[1], v[2], v[3]};
+        drawTexturedTriangle(x2, y2, u2, v2, page);
+    }
+}
+
+void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
+                               const int u[3], const int v[3],
+                               std::uint16_t page) noexcept {
+    // Initial 15-bit direct-texture path. Indexed 4/8-bit CLUT modes are
+    // intentionally deferred until their palette addressing is implemented.
+    if (((page >> 7) & 3u) != 2u) {
+        ++unsupportedCommandCount_;
+        return;
+    }
+    const long long area = edgeFunction(x[0], y[0], x[1], y[1], x[2], y[2]);
+    if (area == 0) return;
+    const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
+    const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
+    const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
+    const int bottom = static_cast<int>((drawAreaBottomRight_ >> 10) & 0x1FFu);
+    const int minX = std::max({0, left, std::min({x[0], x[1], x[2]})});
+    const int minY = std::max({0, top, std::min({y[0], y[1], y[2]})});
+    const int maxX = std::min({static_cast<int>(Vram::kWidth)-1, right, std::max({x[0],x[1],x[2]})});
+    const int maxY = std::min({static_cast<int>(Vram::kHeight)-1, bottom, std::max({y[0],y[1],y[2]})});
+    if (minX > maxX || minY > maxY) return;
+    const int pageX = static_cast<int>(page & 0xFu) * 64;
+    const int pageY = static_cast<int>((page >> 4) & 1u) * 256;
+    const std::uint32_t windowMaskX = textureWindow_ & 0x1Fu;
+    const std::uint32_t windowMaskY = (textureWindow_ >> 5) & 0x1Fu;
+    const std::uint32_t windowOffX = (textureWindow_ >> 10) & 0x1Fu;
+    const std::uint32_t windowOffY = (textureWindow_ >> 15) & 0x1Fu;
+    for (int py=minY; py<=maxY; ++py) for (int px=minX; px<=maxX; ++px) {
+        long long w0=edgeFunction(x[1],y[1],x[2],y[2],px,py);
+        long long w1=edgeFunction(x[2],y[2],x[0],y[0],px,py);
+        long long w2=edgeFunction(x[0],y[0],x[1],y[1],px,py);
+        if (area>0 ? (w0<0||w1<0||w2<0) : (w0>0||w1>0||w2>0)) continue;
+        if (area<0) { w0=-w0; w1=-w1; w2=-w2; }
+        const long long den=area>0?area:-area;
+        int tu=static_cast<int>((w0*u[0]+w1*u[1]+w2*u[2])/den);
+        int tv=static_cast<int>((w0*v[0]+w1*v[1]+w2*v[2])/den);
+        tu &= 0xFF; tv &= 0xFF;
+        tu = (tu & ~static_cast<int>(windowMaskX << 3)) |
+             static_cast<int>((windowOffX & windowMaskX) << 3);
+        tv = (tv & ~static_cast<int>(windowMaskY << 3)) |
+             static_cast<int>((windowOffY & windowMaskY) << 3);
+        std::uint16_t texel=0;
+        const std::uint32_t tx=static_cast<std::uint32_t>((pageX+tu)%static_cast<int>(Vram::kWidth));
+        const std::uint32_t ty=static_cast<std::uint32_t>((pageY+tv)%static_cast<int>(Vram::kHeight));
+        if (vram_.readPixel(tx,ty,texel) && texel!=0)
+            vram_.writePixel(static_cast<std::uint32_t>(px),static_cast<std::uint32_t>(py),texel);
+    }
+}
 
 void Gpu::executeGouraudPolygon() noexcept {
     const bool quad = static_cast<std::uint8_t>(packet_[0] >> 24) == 0x38;
