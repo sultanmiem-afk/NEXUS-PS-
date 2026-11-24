@@ -26,6 +26,9 @@ SystemStepResult Ps1System::step() {
     SystemStepResult result{};
     cpu_.cop0().setHardwareInterruptPending(memory_.interrupts().active());
     result.cpu = cpu_.step();
+    // Drain queued GP0 words at the system-step boundary, after the CPU bus
+    // transaction. DMA's synchronous client also enqueues through the same FIFO.
+    gpu_.serviceGp0Fifo(GpuFifo::kCapacity);
     // Advance the GPU timing domain first so timers observe current blanking state.
     const GpuTimingEvents gpuTiming = gpu_.advanceTiming(result.cpu.cycles);
     memory_.timer0().setHBlankActive(gpuTiming.hBlankActive);
@@ -77,7 +80,7 @@ bool Ps1System::SystemBus::write16(std::uint32_t address, std::uint16_t value) {
 }
 
 bool Ps1System::SystemBus::write32(std::uint32_t address, std::uint32_t value) {
-    if (address == kGpuGp0) { gpu_.writeGp0(value); return true; }
+    if (address == kGpuGp0) return gpu_.enqueueGp0(value);
     if (address == kGpuGp1) { gpu_.writeGp1(value); return true; }
     return memory_.write32(address, value);
 }
