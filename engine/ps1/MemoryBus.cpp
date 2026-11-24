@@ -1,0 +1,40 @@
+#include "MemoryBus.hpp"
+
+namespace nexus::ps1 {
+
+void MemoryBus::clear() noexcept {
+    ram_.clear();
+    scratchpad_.clear();
+}
+
+bool MemoryBus::read8(std::uint32_t address, std::uint8_t& value) {
+    if (ram_.read8(address, value)) return true;
+    return scratchpad_.read8(address, value);
+}
+
+bool MemoryBus::read16(std::uint32_t address, std::uint16_t& value) {
+    if (ram_.read16(address, value)) return true;
+    return scratchpad_.read16(address, value);
+}
+
+bool MemoryBus::read32(std::uint32_t address, std::uint32_t& value) {
+    if (ram_.read32(address, value)) return true;
+    return scratchpad_.read32(address, value);
+}
+
+bool MemoryBus::write8(std::uint32_t address, std::uint8_t value) {
+    if (ram_.write8(address, value)) return true;
+    return scratchpad_.write8(address, value);
+}
+
+bool MemoryBus::write16(std::uint32_t address, std::uint16_t value) {
+    if (ram_.write16(address, value)) return true;
+    return scratchpad_.write16(address, value);
+}
+
+bool MemoryBus::write32(std::uint32_t address, std::uint32_t value) {
+    if (ram_.write32(address, value)) return true;
+    return scratchpad_.write32(address, value);
+}
+
+} // namespace nexus::ps1
