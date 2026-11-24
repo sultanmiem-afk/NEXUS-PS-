@@ -36,6 +36,7 @@ private:
     std::uint16_t target_ = 0;
     std::uint32_t mode_ = 0;
     std::uint8_t dividerPhase_ = 0;
+    std::uint8_t irqPulseTicks_ = 0;
     bool reachedTarget_ = false;
     bool reachedOverflow_ = false;
     bool irqArmed_ = true;
