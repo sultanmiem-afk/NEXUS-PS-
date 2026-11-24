@@ -4,6 +4,7 @@ namespace nexus::ps1 {
 
 void Spu::reset() noexcept {
     clearRam();
+    registers_.fill(0);
 }
 
 void Spu::clearRam(std::uint8_t value) noexcept {
