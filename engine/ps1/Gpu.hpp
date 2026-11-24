@@ -2,11 +2,49 @@
 
 #include "Vram.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
 namespace nexus::ps1 {
+
+// Fixed-capacity GP0 word FIFO. This first step is a tested queue primitive;
+// GPU command execution remains synchronous until the service/drain stage.
+class GpuFifo {
+public:
+    static constexpr std::size_t kCapacity = 16;
+
+    bool push(std::uint32_t value) noexcept {
+        if (size_ == kCapacity) return false;
+        words_[(head_ + size_) % kCapacity] = value;
+        ++size_;
+        return true;
+    }
+
+    bool pop(std::uint32_t& value) noexcept {
+        if (size_ == 0) return false;
+        value = words_[head_];
+        head_ = (head_ + 1) % kCapacity;
+        --size_;
+        return true;
+    }
+
+    bool empty() const noexcept { return size_ == 0; }
+    bool full() const noexcept { return size_ == kCapacity; }
+    std::size_t size() const noexcept { return size_; }
+    constexpr std::size_t capacity() const noexcept { return kCapacity; }
+
+    void clear() noexcept {
+        head_ = 0;
+        size_ = 0;
+    }
+
+private:
+    std::array<std::uint32_t, kCapacity> words_{};
+    std::size_t head_ = 0;
+    std::size_t size_ = 0;
+};
 
 struct GpuTimingEvents {
     std::uint32_t dotClockTicks = 0;
