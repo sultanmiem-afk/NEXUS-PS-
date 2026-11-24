@@ -93,6 +93,20 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
     assert(system.cpu().state().pc == 0x80000080u);
 
+    // Timer 1 CPU-clock mode raises I_STAT source 5 and reaches the CPU IRQ path.
+    system.reset(0x00000000u);
+    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 5));
+    assert(system.memory().write32(Timer1::kTargetAddress, 1u));
+    assert(system.memory().write32(Timer1::kModeAddress, 1u << 4));
+    putWord(system.memory().ram(), 0, 0x00000000u);
+    const auto timer1Step = system.step();
+    assert(timer1Step.cpu.status == CpuStepStatus::Executed);
+    assert(timer1Step.timer1Irq);
+    assert((system.memory().interrupts().status() & (1u << 5)) != 0u);
+    system.cpu().cop0().write(Cop0::kStatus, (1u << 0) | (1u << 10));
+    assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(system.cpu().state().pc == 0x80000080u);
+
     // BIOS loading validates exact image size and remains loaded across reset.
     std::vector<std::uint8_t> bios(BiosRom::kSize, 0);
     assert(system.loadBios(bios));
