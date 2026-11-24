@@ -247,9 +247,8 @@ void Gpu::executeTexturedPolygon() noexcept {
 void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                                const int u[3], const int v[3],
                                std::uint16_t page) noexcept {
-    // Initial 15-bit direct-texture path. Indexed 4/8-bit CLUT modes are
-    // intentionally deferred until their palette addressing is implemented.
-    if (((page >> 7) & 3u) != 2u) {
+    const unsigned depth = (page >> 7) & 3u;
+    if (depth == 3u) {
         ++unsupportedCommandCount_;
         return;
     }
@@ -264,12 +263,18 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
     const int maxX = std::min({static_cast<int>(Vram::kWidth)-1, right, std::max({x[0],x[1],x[2]})});
     const int maxY = std::min({static_cast<int>(Vram::kHeight)-1, bottom, std::max({y[0],y[1],y[2]})});
     if (minX > maxX || minY > maxY) return;
+
     const int pageX = static_cast<int>(page & 0xFu) * 64;
     const int pageY = static_cast<int>((page >> 4) & 1u) * 256;
     const std::uint32_t windowMaskX = textureWindow_ & 0x1Fu;
     const std::uint32_t windowMaskY = (textureWindow_ >> 5) & 0x1Fu;
     const std::uint32_t windowOffX = (textureWindow_ >> 10) & 0x1Fu;
     const std::uint32_t windowOffY = (textureWindow_ >> 15) & 0x1Fu;
+    // CLUT coordinates are supplied in the high half of the first UV word.
+    const std::uint32_t clut = packet_[2] >> 16;
+    const std::uint32_t clutX = (clut & 0x3Fu) * 16u;
+    const std::uint32_t clutY = (clut >> 6) & 0x1FFu;
+
     for (int py=minY; py<=maxY; ++py) for (int px=minX; px<=maxX; ++px) {
         long long w0=edgeFunction(x[1],y[1],x[2],y[2],px,py);
         long long w1=edgeFunction(x[2],y[2],x[0],y[0],px,py);
@@ -277,17 +282,32 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
         if (area>0 ? (w0<0||w1<0||w2<0) : (w0>0||w1>0||w2>0)) continue;
         if (area<0) { w0=-w0; w1=-w1; w2=-w2; }
         const long long den=area>0?area:-area;
-        int tu=static_cast<int>((w0*u[0]+w1*u[1]+w2*u[2])/den);
-        int tv=static_cast<int>((w0*v[0]+w1*v[1]+w2*v[2])/den);
-        tu &= 0xFF; tv &= 0xFF;
+        int tu=static_cast<int>((w0*u[0]+w1*u[1]+w2*u[2])/den) & 0xFF;
+        int tv=static_cast<int>((w0*v[0]+w1*v[1]+w2*v[2])/den) & 0xFF;
         tu = (tu & ~static_cast<int>(windowMaskX << 3)) |
              static_cast<int>((windowOffX & windowMaskX) << 3);
         tv = (tv & ~static_cast<int>(windowMaskY << 3)) |
              static_cast<int>((windowOffY & windowMaskY) << 3);
-        std::uint16_t texel=0;
-        const std::uint32_t tx=static_cast<std::uint32_t>((pageX+tu)%static_cast<int>(Vram::kWidth));
-        const std::uint32_t ty=static_cast<std::uint32_t>((pageY+tv)%static_cast<int>(Vram::kHeight));
-        if (vram_.readPixel(tx,ty,texel) && texel!=0)
+
+        std::uint16_t texel = 0;
+        if (depth == 2u) {
+            const std::uint32_t tx=static_cast<std::uint32_t>((pageX+tu)%static_cast<int>(Vram::kWidth));
+            const std::uint32_t ty=static_cast<std::uint32_t>((pageY+tv)%static_cast<int>(Vram::kHeight));
+            vram_.readPixel(tx,ty,texel);
+        } else {
+            const unsigned pixelsPerWord = depth == 0u ? 4u : 2u;
+            const unsigned bitsPerPixel = depth == 0u ? 4u : 8u;
+            const std::uint32_t wordX=static_cast<std::uint32_t>((pageX + tu / static_cast<int>(pixelsPerWord)) % static_cast<int>(Vram::kWidth));
+            const std::uint32_t wordY=static_cast<std::uint32_t>((pageY+tv)%static_cast<int>(Vram::kHeight));
+            std::uint16_t packed = 0;
+            if (!vram_.readPixel(wordX,wordY,packed)) continue;
+            const unsigned shift=static_cast<unsigned>(tu % static_cast<int>(pixelsPerWord))*bitsPerPixel;
+            const std::uint16_t paletteIndex=static_cast<std::uint16_t>((packed >> shift) & (depth==0u?0xFu:0xFFu));
+            const std::uint32_t paletteX=(clutX+paletteIndex)%Vram::kWidth;
+            if (!vram_.readPixel(paletteX,clutY,texel)) continue;
+        }
+        // PS1 texture index/color zero is transparent.
+        if (texel != 0)
             vram_.writePixel(static_cast<std::uint32_t>(px),static_cast<std::uint32_t>(py),texel);
     }
 }
