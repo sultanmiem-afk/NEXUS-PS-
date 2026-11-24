@@ -4,6 +4,7 @@ namespace nexus::ps1 {
 
 void Cop0::reset() noexcept {
     regs_.fill(0);
+    regs_[kStatus] = kStatusBev;
 }
 
 std::uint32_t Cop0::read(std::uint32_t index) const noexcept {
