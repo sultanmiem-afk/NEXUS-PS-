@@ -287,5 +287,40 @@ int main() {
         assert((cp0.read(Cop0::kStatus) & 0x3Fu) == 0x00000015u);
     }
 
+    // A syscall in a branch delay slot must report the branch PC and set Cause.BD.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        put(bus,0,i_type(0x04,0,0,2)); // BEQ r0, r0, +2
+        put(bus,4,0x0000000Cu);       // SYSCALL in delay slot
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        const auto result=cpu.step();
+        assert(result.status==CpuStepStatus::ExceptionTaken);
+        assert(cpu.cop0().read(Cop0::kEpc)==0u);
+        assert((cpu.cop0().read(Cop0::kCause)&Cop0::kCauseBranchDelay)!=0);
+        assert(((cpu.cop0().read(Cop0::kCause)>>2)&0x1Fu)==
+               static_cast<std::uint32_t>(CpuException::Syscall));
+    }
+    // Misaligned halfword/word accesses raise address exceptions and update BadVaddr.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x101u;
+        put(bus,0,i_type(0x21,1,2,0)); // LH from odd address
+        const auto result=cpu.step();
+        assert(result.status==CpuStepStatus::ExceptionTaken);
+        assert(((cpu.cop0().read(Cop0::kCause)>>2)&0x1Fu)==
+               static_cast<std::uint32_t>(CpuException::AddressLoad));
+        assert(cpu.cop0().read(Cop0::kBadVaddr)==0x101u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x102u; cpu.state().gpr[2]=0xAABBCCDDu;
+        put(bus,0,i_type(0x2B,1,2,0)); // SW to non-word-aligned address
+        const auto result=cpu.step();
+        assert(result.status==CpuStepStatus::ExceptionTaken);
+        assert(((cpu.cop0().read(Cop0::kCause)>>2)&0x1Fu)==
+               static_cast<std::uint32_t>(CpuException::AddressStore));
+        assert(cpu.cop0().read(Cop0::kBadVaddr)==0x102u);
+    }
+
     return 0;
 }
