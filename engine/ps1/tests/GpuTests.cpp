@@ -61,8 +61,8 @@ int main() {
 
 
     // 4-bit indexed texture: nibble index resolves through a 16-color CLUT.
-    vram.writePixel(128, 10, 0x0003u); // pixel index 3 in low nibble.
-    vram.writePixel(48, 20, 0x03E0u);  // CLUT entry 3.
+    vram.writePixel(0, 0, 0x0003u); // pixel index 3 in low nibble.
+    vram.writePixel(48, 1, 0x03E0u);  // CLUT entry 3.
     gpu.writeGp0(0x24000000u);
     gpu.writeGp0(500u | (100u << 16));
     gpu.writeGp0(0u | (1u << 16)); // CLUT X=0, Y=1.
@@ -73,8 +73,8 @@ int main() {
     assert(vram.readPixel(505, 105, pixel) && pixel == 0x03E0u);
 
     // 8-bit indexed texture: byte index resolves through its CLUT.
-    vram.writePixel(192, 30, 0x002Au); // low byte index 42.
-    vram.writePixel(42, 40, 0x7C00u);  // CLUT entry 42.
+    vram.writePixel(0, 0, 0x002Au); // low byte index 42.
+    vram.writePixel(42, 2, 0x7C00u);  // CLUT entry 42.
     gpu.writeGp0(0x24000000u);
     gpu.writeGp0(550u | (100u << 16));
     gpu.writeGp0(0u | (2u << 16)); // CLUT Y=2.
@@ -83,6 +83,29 @@ int main() {
     gpu.writeGp0(550u | (120u << 16));
     gpu.writeGp0(0u);
     assert(vram.readPixel(555, 105, pixel) && pixel == 0x7C00u);
+
+
+    // Modulated textured triangle: neutral 128 RGB preserves texture color.
+    vram.writePixel(0, 0, 0x03E0u);
+    gpu.writeGp0(0x24808080u);
+    gpu.writeGp0(600u | (100u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(620u | (100u << 16));
+    gpu.writeGp0(0x01000000u);
+    gpu.writeGp0(600u | (120u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(605, 105, pixel) && pixel == 0x03E0u);
+
+    // Raw-texture opcode bypasses vertex-color modulation.
+    vram.writePixel(0, 0, 0x7C00u);
+    gpu.writeGp0(0x25FFFFFFu);
+    gpu.writeGp0(630u | (100u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(650u | (100u << 16));
+    gpu.writeGp0(0x01000000u);
+    gpu.writeGp0(630u | (120u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(635, 105, pixel) && pixel == 0x7C00u);
 
     gpu.writeGp0(0x400000FFu);
     gpu.writeGp0(300u | (300u << 16));
