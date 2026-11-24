@@ -14,6 +14,7 @@ constexpr std::uint32_t sign_extend16(std::uint16_t v) noexcept {
 
 void CpuCore::reset(std::uint32_t reset_vector) noexcept {
     state_.reset(reset_vector);
+    cop0_.reset();
     in_delay_slot_ = false;
 }
 
@@ -32,7 +33,9 @@ CpuStepResult CpuCore::step() {
     result.instruction_pc = state_.pc;
 
     if ((state_.pc & 3u) != 0) {
-        result.status = CpuStepStatus::AddressError;
+        cop0_.enter_exception(state_, CpuException::AddressLoad, state_.pc, in_delay_slot_, state_.pc);
+        in_delay_slot_ = false;
+        result.status = CpuStepStatus::ExceptionTaken;
         return result;
     }
 
@@ -50,6 +53,11 @@ CpuStepResult CpuCore::step() {
     const auto uimm = static_cast<std::uint32_t>(ins.immediate());
     const auto pc = state_.pc;
     const bool was_delay_slot = in_delay_slot_;
+    auto raise_exception = [&](CpuException code, std::uint32_t bad_vaddr = 0u) {
+        cop0_.enter_exception(state_, code, pc, was_delay_slot, bad_vaddr);
+        result.status = CpuStepStatus::ExceptionTaken;
+        in_delay_slot_ = false;
+    };
 
     // Advance first. A taken branch replaces next_pc, leaving exactly one
     // instruction at the sequential PC to execute as the branch delay slot.
@@ -125,10 +133,26 @@ CpuStepResult CpuCore::step() {
             else { state_.lo = 0xFFFFFFFFu; state_.hi = rs; }
             result.cycles = 36;
             break;
-        case 0x20: write_reg(ins.rd(), rs + rt); break; // ADD (overflow trap pending)
+        case 0x20: { // ADD
+            const auto sum = static_cast<std::int64_t>(static_cast<std::int32_t>(rs)) +
+                             static_cast<std::int64_t>(static_cast<std::int32_t>(rt));
+            if (sum < std::numeric_limits<std::int32_t>::min() || sum > std::numeric_limits<std::int32_t>::max())
+                raise_exception(CpuException::ArithmeticOverflow);
+            else write_reg(ins.rd(), static_cast<std::uint32_t>(sum));
+            break;
+        }
         case 0x21: write_reg(ins.rd(), rs + rt); break; // ADDU
-        case 0x22: write_reg(ins.rd(), rs - rt); break; // SUB (overflow trap pending)
+        case 0x22: {
+            const auto difference = static_cast<std::int64_t>(static_cast<std::int32_t>(rs)) -
+                                    static_cast<std::int64_t>(static_cast<std::int32_t>(rt));
+            if (difference < std::numeric_limits<std::int32_t>::min() || difference > std::numeric_limits<std::int32_t>::max())
+                raise_exception(CpuException::ArithmeticOverflow);
+            else write_reg(ins.rd(), static_cast<std::uint32_t>(difference));
+            break;
+        }
         case 0x23: write_reg(ins.rd(), rs - rt); break; // SUBU
+        case 0x0C: raise_exception(CpuException::Syscall); break;
+        case 0x0D: raise_exception(CpuException::Breakpoint); break;
         case 0x24: write_reg(ins.rd(), rs & rt); break; // AND
         case 0x25: write_reg(ins.rd(), rs | rt); break; // OR
         case 0x26: write_reg(ins.rd(), rs ^ rt); break; // XOR
@@ -136,7 +160,7 @@ CpuStepResult CpuCore::step() {
         case 0x2A: write_reg(ins.rd(), static_cast<std::int32_t>(rs) <
                                       static_cast<std::int32_t>(rt)); break; // SLT
         case 0x2B: write_reg(ins.rd(), rs < rt); break; // SLTU
-        default: result.status = CpuStepStatus::ReservedInstruction; break;
+        default: raise_exception(CpuException::ReservedInstruction); break;
         }
         break;
 
@@ -153,14 +177,33 @@ CpuStepResult CpuCore::step() {
     case 0x05: if (rs != rt) { branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2)); in_delay_slot_ = true; } break;
     case 0x06: if (static_cast<std::int32_t>(rs) <= 0) { branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2)); in_delay_slot_ = true; } break;
     case 0x07: if (static_cast<std::int32_t>(rs) > 0) { branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2)); in_delay_slot_ = true; } break;
-    case 0x08: write_reg(ins.rt(), rs + static_cast<std::uint32_t>(imm)); break; // ADDI (overflow trap pending)
+    case 0x08: {
+        const auto sum = static_cast<std::int64_t>(static_cast<std::int32_t>(rs)) + imm;
+        if (sum < std::numeric_limits<std::int32_t>::min() || sum > std::numeric_limits<std::int32_t>::max())
+            raise_exception(CpuException::ArithmeticOverflow);
+        else write_reg(ins.rt(), static_cast<std::uint32_t>(sum));
+        break;
+    }
     case 0x09: write_reg(ins.rt(), rs + static_cast<std::uint32_t>(imm)); break; // ADDIU
     case 0x0A: write_reg(ins.rt(), static_cast<std::int32_t>(rs) < imm); break; // SLTI
     case 0x0B: write_reg(ins.rt(), rs < static_cast<std::uint32_t>(imm)); break; // SLTIU
     case 0x0C: write_reg(ins.rt(), rs & uimm); break; // ANDI
     case 0x0D: write_reg(ins.rt(), rs | uimm); break; // ORI
     case 0x0E: write_reg(ins.rt(), rs ^ uimm); break; // XORI
-    case 0x0F: write_reg(ins.rt(), uimm << 16); break; // LUI
+    case 0x0F: write_reg(ins.rt(), uimm << 16); break;
+
+    case 0x10: {
+        switch (ins.rs()) {
+        case 0x00: write_reg(ins.rt(), cop0_.read(ins.rd())); break;
+        case 0x04: cop0_.write(ins.rd(), rt); break;
+        case 0x10:
+            if (ins.function() == 0x10) cop0_.return_from_exception();
+            else raise_exception(CpuException::ReservedInstruction);
+            break;
+        default: raise_exception(CpuException::ReservedInstruction); break;
+        }
+        break;
+    }
 
     case 0x20: { // LB
         std::uint8_t v = 0;
@@ -184,12 +227,11 @@ CpuStepResult CpuCore::step() {
     case 0x29: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 1u) result.status = CpuStepStatus::AddressError; else if (!bus_.write16(a, static_cast<std::uint16_t>(rt))) result.status = CpuStepStatus::BusFault; break; }
     case 0x2B: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 3u) result.status = CpuStepStatus::AddressError; else if (!bus_.write32(a, rt)) result.status = CpuStepStatus::BusFault; break; }
     default:
-        result.status = CpuStepStatus::ReservedInstruction;
+        raise_exception(CpuException::ReservedInstruction);
         break;
     }
 
     state_.gpr[0] = 0;
-    (void)was_delay_slot; // Used by the upcoming exception/CP0 implementation.
     return result;
 }
 
