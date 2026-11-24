@@ -164,6 +164,25 @@ CpuStepResult CpuCore::step() {
         }
         break;
 
+    case 0x01: { // REGIMM: BLTZ / BGEZ
+        const auto condition = ins.rt();
+        const bool negative = static_cast<std::int32_t>(rs) < 0;
+        if (condition == 0x00u) { // BLTZ
+            if (negative) {
+                branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+                in_delay_slot_ = true;
+            }
+        } else if (condition == 0x01u) { // BGEZ
+            if (!negative) {
+                branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+                in_delay_slot_ = true;
+            }
+        } else {
+            raise_exception(CpuException::ReservedInstruction);
+        }
+        break;
+    }
+
     case 0x02: // J
         branch((state_.pc & 0xF0000000u) | (ins.jump_index() << 2));
         in_delay_slot_ = true;
