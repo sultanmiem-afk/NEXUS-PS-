@@ -1,13 +1,14 @@
 #pragma once
 
+#include "BiosRom.hpp"
 #include "CpuCore.hpp"
 #include "Ram.hpp"
 #include "Scratchpad.hpp"
 
 namespace nexus::ps1 {
 
-// Connects implemented CPU-visible memory devices. Unimplemented BIOS/MMIO
-// regions deliberately return false rather than pretending to contain RAM.
+// CPU-visible bus. VRAM remains owned by the GPU path; it is not a flat
+// CPU-addressable RAM region on the original PlayStation.
 class MemoryBus final : public CpuBus {
 public:
     MemoryBus() = default;
@@ -16,6 +17,8 @@ public:
     const Ram& ram() const noexcept { return ram_; }
     Scratchpad& scratchpad() noexcept { return scratchpad_; }
     const Scratchpad& scratchpad() const noexcept { return scratchpad_; }
+    BiosRom& bios() noexcept { return bios_; }
+    const BiosRom& bios() const noexcept { return bios_; }
 
     void clear() noexcept;
 
@@ -29,6 +32,7 @@ public:
 private:
     Ram ram_{};
     Scratchpad scratchpad_{};
+    BiosRom bios_{};
 };
 
 } // namespace nexus::ps1
