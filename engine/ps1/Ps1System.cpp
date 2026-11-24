@@ -16,6 +16,7 @@ void Ps1System::reset(std::uint32_t resetVector) noexcept {
     vram_.clear();
     gpu_.reset();
     cpu_.reset(resetVector);
+    audioSamplePhase_ = 0;
 }
 
 bool Ps1System::loadBios(const std::vector<std::uint8_t>& image) noexcept {
@@ -70,6 +71,15 @@ SystemStepResult Ps1System::step() {
         result.dmaWords = memory_.dma().lastTransferWords();
     if (memory_.dma().irqPending())
         memory_.interrupts().request(1u << 3); // I_STAT DMA source
+
+    // 44.1 kHz sample clock derived from the modeled 33.8688 MHz PS1 CPU clock.
+    // The fractional phase is retained so samples are emitted at a stable average rate.
+    constexpr std::uint64_t kCpuClockHz = 33868800u;
+    audioSamplePhase_ += static_cast<std::uint64_t>(result.cpu.cycles) * kAudioSampleRate;
+    while (audioSamplePhase_ >= kCpuClockHz) {
+        (void)memory_.spu().mixSample();
+        audioSamplePhase_ -= kCpuClockHz;
+    }
     return result;
 }
 
