@@ -703,7 +703,7 @@ int main() {
     gpu.writeGp0(0x7800FF00u);
     gpu.writeGp0(160u | (160u << 16u));
     assert(vram.readPixel(175u,175u,pixel) && pixel==0x03E0u);
-    // Textured sprite in 15-bit mode; raw-texture flag is bit 0.
+    // Textured sprite in 15-bit mode; sprite raw-texture flag is bit 1.
     vram.writePixel(0u,0u,0x7C00u);
     gpu.writeGp0(0xE1000100u); // 15-bit page 0, ABR=0.
     gpu.writeGp0(0x66000000u);
@@ -711,9 +711,12 @@ int main() {
     gpu.writeGp0(0u);
     gpu.writeGp0(2u | (2u << 16u));
     assert(vram.readPixel(200u,200u,pixel) && pixel==0x7C00u);
-    // Next packet must remain aligned after textured sprite, including poison payload.
-    gpu.writeGp0(0xA0000000u); // image-transfer command starts only at packet boundary.
-    gpu.writeGp0(0u); gpu.writeGp0(0u);
+    // Poison word in a rectangle XY slot must not be mistaken for GP0(A0).
+    gpu.writeGp0(0x600000FFu);
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(0u,0u,pixel) && pixel==0x001Fu);
+    // Next command must begin exactly after the three-word rectangle.
     gpu.writeGp0(0x020000FFu);
     gpu.writeGp0(850u | (400u << 16u));
     gpu.writeGp0(1u | (1u << 16u));
