@@ -16,8 +16,6 @@ public:
 
     struct StereoSample { std::int16_t left = 0; std::int16_t right = 0; };
 
-    struct StereoSample { std::int16_t left = 0; std::int16_t right = 0; };
-
     struct VoiceState {
         std::uint16_t volumeLeft = 0;
         std::uint16_t volumeRight = 0;
@@ -63,12 +61,6 @@ public:
     bool popOutputSample(StereoSample& sample) noexcept;
     std::size_t queuedOutputSamples() const noexcept;
 
-    // Mix one output frame from all active voices. This is a simplified model;
-    // pitch modulation, hardware volume sweeps and the full reverb unit are not modeled.
-    StereoSample mixSample() noexcept;
-    bool popOutputSample(StereoSample& sample) noexcept;
-    std::size_t queuedOutputSamples() const noexcept;
-
     bool readRam8(std::uint32_t address, std::uint8_t& value) const noexcept;
     bool readRam16(std::uint32_t address, std::uint16_t& value) const noexcept;
     bool readRam32(std::uint32_t address, std::uint32_t& value) const noexcept;
@@ -93,14 +85,6 @@ private:
     std::array<std::int32_t, 512u> reverbDelayLeft_{};
     std::array<std::int32_t, 512u> reverbDelayRight_{};
     std::size_t reverbPosition_ = 0;
-    static constexpr std::size_t kOutputQueueSize = 4096u;
-    std::array<StereoSample, kOutputQueueSize> outputQueue_{};
-    std::size_t outputRead_ = 0;
-    std::size_t outputWrite_ = 0;
-    std::size_t outputCount_ = 0;
-    std::array<std::int32_t, 512u> reverbDelayLeft_{};
-    std::array<std::int32_t, 512u> reverbDelayRight_{};
-    std::size_t reverbPosition_ = 0;
     std::uint32_t keyOnMask_ = 0;
     std::uint32_t keyOffMask_ = 0;
 
@@ -108,7 +92,6 @@ private:
     void applyKeyMask(std::uint32_t mask, bool keyOn) noexcept;
     bool decodeVoiceBlock(std::size_t index) noexcept;
     void updateAdsrPhase(std::size_t index) noexcept;
-    static std::int16_t clampSample(std::int64_t value) noexcept;
     static std::int16_t clampSample(std::int64_t value) noexcept;
 };
 
