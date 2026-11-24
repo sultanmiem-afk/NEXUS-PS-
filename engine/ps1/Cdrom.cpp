@@ -223,12 +223,14 @@ bool Cdrom::readDataWord(std::uint32_t& value) noexcept {
 void Cdrom::advance(std::uint32_t cpuCycles) noexcept {
     if (!reading_ || !imageLoaded()) return;
     if (!data_.empty()) return;
+    const std::uint32_t sectorCycles = (mode_ & 0x80u) != 0u
+        ? (kCyclesPerSector / 2u) : kCyclesPerSector;
     const std::uint64_t total = static_cast<std::uint64_t>(cycleRemainder_) + cpuCycles;
-    if (total < kCyclesPerSector) {
+    if (total < sectorCycles) {
         cycleRemainder_ = static_cast<std::uint32_t>(total);
         return;
     }
-    cycleRemainder_ = static_cast<std::uint32_t>(total % kCyclesPerSector);
+    cycleRemainder_ = static_cast<std::uint32_t>(total % sectorCycles);
     produceSector();
 }
 
@@ -292,7 +294,7 @@ void Cdrom::executeCommand(std::uint8_t command) noexcept {
         pushMsf(currentLba_ + 150u);
         pushResponse(track != nullptr && track->dataOffset == 24u ? 0x02u : 0x01u);
         pushResponse(0u); pushResponse(0u); pushResponse(0u); pushResponse(0u);
-        pushResponse(0u); raiseInterrupt(kIrqCommand); break;
+        raiseInterrupt(kIrqCommand); break;
     }
     case 0x11u: { // GetlocP: track/index and relative/absolute time
         const Track* track = findTrack(currentLba_);
