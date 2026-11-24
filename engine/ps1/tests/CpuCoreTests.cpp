@@ -169,7 +169,7 @@ int main() {
         assert(cpu.state().gpr[3]==1u);
         assert(cpu.state().gpr[4]==0xFFFF80FFu);
         assert(cpu.state().gpr[5]==0x80FF7F01u);
-        assert(cpu.state().gpr[6]==0xFFu && cpu.state().gpr[7]==0x7F01u);
+        assert(cpu.state().gpr[6]==0x7Fu && cpu.state().gpr[7]==0x7F01u);
         std::uint32_t stored=0; assert(bus.read32(0x108,stored)); assert(stored==0x12345678u);
     }
     // JAL target, link address, and delay-slot execution.
