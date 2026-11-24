@@ -15,6 +15,10 @@ void DmaController::reset() noexcept {
     dicrFlags_ = 0;
     lastTransferWords_ = 0;
     lastCdromTransferWords_ = 0;
+    cdromDmaActive_ = false;
+    cdromDmaBlockSize_ = 0;
+    cdromDmaBlocksRemaining_ = 0;
+    cdromDmaWordsInBlock_ = 0;
 }
 
 std::uint32_t DmaController::base(std::size_t channel) const noexcept {
@@ -92,8 +96,11 @@ bool DmaController::write32(std::uint32_t address,
         ch.blockControl = value;
     } else if (reg == 0x8u) {
         // Preserve the modeled writable control bits. The system integration
-        // layer explicitly invokes executeGpuTransfer for channel 2.
+        // layer explicitly invokes the device-specific DMA execution paths.
         ch.channelControl = value & 0x71770703u;
+        if (channel == 3u && (ch.channelControl & (1u << 24u)) != 0u) {
+            cdromDmaActive_ = false;
+        }
     } else {
         return false;
     }
@@ -108,33 +115,60 @@ bool DmaController::executeCdromTransfer(Ram& ram, Cdrom& cdrom) {
     lastCdromTransferWords_ = 0u;
 
     const std::uint32_t control = channel.channelControl;
-    const bool started = (control & (1u << 24)) != 0u;
+    const bool started = (control & (1u << 24u)) != 0u;
     const bool enabled = (dpcr_ & (1u << (kCdromChannel * 4u + 3u))) != 0u;
     const bool deviceToRam = (control & 1u) == 0u;
     const std::uint32_t sync = (control >> 9u) & 3u;
-    if (!started || !enabled || !deviceToRam || sync != 1u) return false;
-
-    const std::uint32_t blockSize = (channel.blockControl & 0xFFFFu) == 0u
-        ? 0x10000u : (channel.blockControl & 0xFFFFu);
-    const std::uint32_t blockCount = (channel.blockControl >> 16u) == 0u
-        ? 0x10000u : (channel.blockControl >> 16u);
-    if (blockSize > kMaxTransferWords ||
-        blockCount > kMaxTransferWords / blockSize) return false;
-    const std::uint32_t words = blockSize * blockCount;
-    if (cdrom.dataAvailableBytes() < static_cast<std::size_t>(words) * 4u)
+    if (!started || !enabled || !deviceToRam || sync != 1u) {
+        cdromDmaActive_ = false;
         return false;
+    }
+
+    if (!cdromDmaActive_) {
+        const std::uint32_t configuredBlockSize = channel.blockControl & 0xFFFFu;
+        const std::uint32_t configuredBlockCount = channel.blockControl >> 16u;
+        cdromDmaBlockSize_ = configuredBlockSize == 0u ? 0x10000u : configuredBlockSize;
+        cdromDmaBlocksRemaining_ = configuredBlockCount == 0u
+            ? 0x10000u : configuredBlockCount;
+        if (cdromDmaBlockSize_ > kMaxTransferWords ||
+            cdromDmaBlocksRemaining_ > kMaxTransferWords / cdromDmaBlockSize_) {
+            return false;
+        }
+        cdromDmaWordsInBlock_ = cdromDmaBlockSize_;
+        cdromDmaActive_ = true;
+    }
+
+    const std::size_t availableWords = cdrom.dataAvailableBytes() / 4u;
+    if (availableWords == 0u) return false;
 
     std::uint32_t address = channel.base & 0x00FFFFFCu;
-    for (std::uint32_t i = 0; i < words; ++i) {
+    const std::uint32_t wordsToTransfer = static_cast<std::uint32_t>(
+        std::min<std::size_t>(availableWords, cdromDmaWordsInBlock_));
+    for (std::uint32_t i = 0; i < wordsToTransfer; ++i) {
         std::uint32_t value = 0u;
         if (!cdrom.readDataWord(value) || !ram.write32(address, value)) return false;
         address = (address + 4u) & 0x00FFFFFFu;
         ++lastCdromTransferWords_;
+        --cdromDmaWordsInBlock_;
     }
     channel.base = address & 0x00FFFFFFu;
-    channel.channelControl &= ~(1u << 24u);
-    dicrFlags_ |= (1u << (24u + kCdromChannel));
-    return true;
+
+    if (cdromDmaWordsInBlock_ == 0u) {
+        --cdromDmaBlocksRemaining_;
+        if (cdromDmaBlocksRemaining_ != 0u)
+            cdromDmaWordsInBlock_ = cdromDmaBlockSize_;
+    }
+
+    const std::uint32_t visibleBlockCount = cdromDmaBlocksRemaining_ & 0xFFFFu;
+    const std::uint32_t visibleBlockSize = cdromDmaWordsInBlock_ & 0xFFFFu;
+    channel.blockControl = (visibleBlockCount << 16u) | visibleBlockSize;
+
+    if (cdromDmaBlocksRemaining_ == 0u) {
+        channel.channelControl &= ~(1u << 24u);
+        dicrFlags_ |= (1u << (24u + kCdromChannel));
+        cdromDmaActive_ = false;
+    }
+    return lastCdromTransferWords_ != 0u;
 }
 
 bool DmaController::executeGpuLinearTransfer(
