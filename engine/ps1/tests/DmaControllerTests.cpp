@@ -36,7 +36,7 @@ int main() {
     assert(dma.read32(DmaController::kDicrAddress, value));
     assert((value & 0x80000000u) == 0);
 
-    assert(!dma.read32(DmaController::kBaseAddress + 0x70u, value));
+    assert(!dma.read32(DmaController::kBaseAddress + 0x78u, value));
     assert(!dma.read32(DmaController::kBaseAddress + 1u, value));
     assert(!dma.write32(DmaController::kBaseAddress + 0xCu, 0u));
 
