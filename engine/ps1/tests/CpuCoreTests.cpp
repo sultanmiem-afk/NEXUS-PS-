@@ -487,12 +487,11 @@ int main() {
     // Arithmetic right shifts are defined for all shift amounts, including 0 and 31.
     {
         TestBus bus; CpuCore cpu(bus); cpu.reset(0);
-        cpu.state().gpr[1]=0x80000001u; cpu.state().gpr[5]=31u;
+        cpu.state().gpr[1]=0x80000001u; cpu.state().gpr[5]=31u; cpu.state().gpr[7]=0u;
         put(bus,0,r_type(0,1,2,0,0x03));  // SRA r2, r1, 0
         put(bus,4,r_type(0,1,3,31,0x03)); // SRA r3, r1, 31
         put(bus,8,r_type(5,1,4,0,0x07));  // SRAV r4, r1, r5
-        cpu.state().gpr[5]=0u;
-        put(bus,12,r_type(5,1,6,0,0x07)); // SRAV r6, r1, r5
+        put(bus,12,r_type(7,1,6,0,0x07)); // SRAV r6, r1, r7
         for(int i=0;i<4;i++) assert(cpu.step().status==CpuStepStatus::Executed);
         assert(cpu.state().gpr[2]==0x80000001u);
         assert(cpu.state().gpr[3]==0xFFFFFFFFu);
