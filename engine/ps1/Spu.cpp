@@ -55,4 +55,27 @@ bool Spu::writeRam32(std::uint32_t address, std::uint32_t value) noexcept {
     return true;
 }
 
+
+bool Spu::isMappedRegister(std::uint32_t offset) noexcept {
+    if ((offset & 1u) != 0 || offset >= 0x200u) return false;
+
+    // Voice register bank: 24 voices, 16 bytes per voice.
+    if (offset < 0x180u) return true;
+
+    // Global SPU and reverb register window.
+    return offset >= 0x180u && offset <= 0x1FEu;
+}
+
+bool Spu::readRegister16(std::uint32_t offset, std::uint16_t& value) const noexcept {
+    if (!isMappedRegister(offset)) return false;
+    value = registers_[offset / 2u];
+    return true;
+}
+
+bool Spu::writeRegister16(std::uint32_t offset, std::uint16_t value) noexcept {
+    if (!isMappedRegister(offset)) return false;
+    registers_[offset / 2u] = value;
+    return true;
+}
+
 } // namespace nexus::ps1
