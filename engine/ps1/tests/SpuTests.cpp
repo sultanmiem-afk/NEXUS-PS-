@@ -61,15 +61,44 @@ int main() {
     assert(spu.readRegister16(0x010u, reg) && reg == 0x2222u);
     assert(spu.readRegister16(0x170u, reg) && reg == 0xABCDu);
 
+    // Per-voice register behavior: volume, pitch, sample address and ADSR.
+    assert(spu.writeRegister16(0x004u, 0x1000u)); // Voice 0 pitch
+    assert(spu.writeRegister16(0x006u, 0x0200u)); // Voice 0 start address
+    assert(spu.writeRegister16(0x008u, 0x8F0Fu)); // Voice 0 ADSR low
+    assert(spu.writeRegister16(0x00Au, 0x7F20u)); // Voice 0 ADSR high
+    assert(spu.writeRegister16(0x00Eu, 0x0240u)); // Voice 0 repeat address
+    assert(spu.readRegister16(0x004u, reg) && reg == 0x1000u);
+    assert(spu.readRegister16(0x006u, reg) && reg == 0x0200u);
+    assert(spu.readRegister16(0x008u, reg) && reg == 0x8F0Fu);
+    assert(spu.readRegister16(0x00Au, reg) && reg == 0x7F20u);
+    assert(spu.readRegister16(0x00Eu, reg) && reg == 0x0240u);
+    assert(!spu.writeRegister16(0x00Cu, 0x1234u)); // Current ADSR volume is read-only.
+
     // Global volume, voice masks, transfer/control and reverb slots.
     assert(spu.writeRegister16(0x180u, 0x1234u)); // Main volume left
     assert(spu.readRegister16(0x180u, reg) && reg == 0x1234u);
     assert(spu.writeRegister16(0x188u, 0x00F0u)); // Key-on low mask
     assert(spu.readRegister16(0x188u, reg) && reg == 0x00F0u);
-    assert(spu.writeRegister16(0x1AAu, 0x0041u)); // SPU control
-    assert(spu.readRegister16(0x1AAu, reg) && reg == 0x0041u);
+    assert(spu.writeRegister16(0x1A8u, 0x0041u)); // SPU control
+    assert(spu.readRegister16(0x1A8u, reg) && reg == 0x0041u);
+    assert(spu.writeRegister16(0x1AAu, 0x0003u)); // Transfer control
+    assert(spu.readRegister16(0x1AAu, reg) && reg == 0x0003u);
     assert(spu.writeRegister16(0x1C0u, 0x0100u)); // Reverb configuration
     assert(spu.readRegister16(0x1C0u, reg) && reg == 0x0100u);
+
+    // Key-on/key-off masks change the corresponding voice state.
+    Spu::VoiceState voice{};
+    assert(spu.writeRegister16(0x188u, 0x0001u)); // Key on voice 0
+    assert(spu.voiceState(0u, voice) && voice.keyedOn);
+    assert(voice.currentAdsrVolume == 0u);
+    assert(spu.readRegister16(0x00Cu, reg) && reg == 0u);
+    assert(spu.writeRegister16(0x18Au, 0x0080u)); // Key on voice 23
+    assert(spu.voiceState(23u, voice) && voice.keyedOn);
+    assert(spu.writeRegister16(0x18Cu, 0x0001u)); // Key off voice 0
+    assert(spu.voiceState(0u, voice) && !voice.keyedOn);
+    assert(spu.keyOnMask() == 0x00800001u);
+    assert(spu.keyOffMask() == 0x00000001u);
+    assert(!spu.voiceState(24u, voice));
 
     // Reverb work-area start is a valid global SPU register.
     assert(spu.writeRegister16(0x1A0u, 0x3456u));
@@ -85,6 +114,8 @@ int main() {
     spu.reset();
     assert(spu.readRegister16(0x000u, reg) && reg == 0u);
     assert(spu.readRegister16(0x180u, reg) && reg == 0u);
+    assert(spu.keyOnMask() == 0u && spu.keyOffMask() == 0u);
+    assert(spu.voiceState(0u, voice) && !voice.keyedOn);
 
     return 0;
 }
