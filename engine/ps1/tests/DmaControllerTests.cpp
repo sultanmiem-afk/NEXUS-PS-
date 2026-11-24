@@ -298,6 +298,37 @@ int main() {
         assert(value == original);
     }
 
+    // 65536-word DMA round-trip stress test across 128 full VRAM rows.
+    for (std::uint32_t i = 0; i < 65536u; ++i) {
+        const std::uint32_t pattern =
+            (0x9E3779B9u * (i + 211u)) ^ (0xD31A0000u | (i * 67u));
+        assert(ram.write32(0xC0000u + i * 4u, pattern));
+    }
+
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(0x00C80000u); // X=0, Y=200.
+    gpu.writeGp0(0x00800400u); // 1024 pixels x 128 rows = 65536 words.
+    assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0xC0000u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 65536u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000001u));
+    assert(dma.executeGpuTransfer(ram, gpu));
+    assert(dma.lastTransferWords() == 65536u);
+
+    gpu.writeGp0(0xC0000000u);
+    gpu.writeGp0(0x00C80000u);
+    gpu.writeGp0(0x00800400u);
+    assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x100000u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 65536u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000000u));
+    assert(dma.executeGpuTransfer(ram, gpu));
+    assert(dma.lastTransferWords() == 65536u);
+    for (std::uint32_t i = 0; i < 65536u; ++i) {
+        std::uint32_t original = 0;
+        assert(ram.read32(0xC0000u + i * 4u, original));
+        assert(ram.read32(0x100000u + i * 4u, value));
+        assert(value == original);
+    }
+
     dma.reset();
     assert(dma.read32(DmaController::kDpcrAddress, value) && value == 0x07654321u);
     assert(dma.read32(DmaController::kBaseAddress, value) && value == 0u);
