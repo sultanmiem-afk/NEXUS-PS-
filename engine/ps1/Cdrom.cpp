@@ -4,6 +4,7 @@
 #include <cctype>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace nexus::ps1 {
 namespace {
