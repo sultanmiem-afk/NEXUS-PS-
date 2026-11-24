@@ -595,7 +595,7 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
             if (!vram_.readPixel(dx, dy, destination)) continue;
             if ((maskSetting_ & 0x02u) != 0 && (destination & 0x8000u) != 0) continue;
             if (semiTransparent && texelStp) {
-                const std::uint32_t mode = (drawMode_ >> 5) & 3u;
+                const std::uint32_t mode = (page >> 5) & 3u;
                 const std::uint32_t sr = texel & 31u, sg = (texel >> 5) & 31u, sb = (texel >> 10) & 31u;
                 const std::uint32_t dr = destination & 31u, dg = (destination >> 5) & 31u, db = (destination >> 10) & 31u;
                 auto blend = [mode](std::uint32_t source, std::uint32_t dest) noexcept {
