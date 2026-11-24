@@ -382,5 +382,56 @@ int main() {
         assert(cpu.state().gpr[3]==42u);
     }
 
+    // Signed ADD, SUB and ADDI overflow must trap without modifying the destination.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x7FFFFFFFu;
+        cpu.state().gpr[2]=1u;
+        cpu.state().gpr[3]=0x13579BDFu;
+        put(bus,0,r_type(1,2,3,0,0x20)); // ADD r3, r1, r2
+        const auto result=cpu.step();
+        assert(result.status==CpuStepStatus::ExceptionTaken);
+        assert(cpu.state().gpr[3]==0x13579BDFu);
+        assert(cpu.cop0().read(Cop0::kEpc)==0u);
+        assert(((cpu.cop0().read(Cop0::kCause)>>2)&0x1Fu)==
+               static_cast<std::uint32_t>(CpuException::ArithmeticOverflow));
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x80000000u;
+        cpu.state().gpr[2]=1u;
+        cpu.state().gpr[3]=0x2468ACE0u;
+        put(bus,0,r_type(1,2,3,0,0x22)); // SUB r3, r1, r2
+        const auto result=cpu.step();
+        assert(result.status==CpuStepStatus::ExceptionTaken);
+        assert(cpu.state().gpr[3]==0x2468ACE0u);
+        assert(cpu.cop0().read(Cop0::kEpc)==0u);
+        assert(((cpu.cop0().read(Cop0::kCause)>>2)&0x1Fu)==
+               static_cast<std::uint32_t>(CpuException::ArithmeticOverflow));
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x7FFFFFFFu;
+        cpu.state().gpr[2]=0x55AA55AAu;
+        put(bus,0,i_type(0x08,1,2,1)); // ADDI r2, r1, 1
+        const auto result=cpu.step();
+        assert(result.status==CpuStepStatus::ExceptionTaken);
+        assert(cpu.state().gpr[2]==0x55AA55AAu);
+        assert(cpu.cop0().read(Cop0::kEpc)==0u);
+        assert(((cpu.cop0().read(Cop0::kCause)>>2)&0x1Fu)==
+               static_cast<std::uint32_t>(CpuException::ArithmeticOverflow));
+    }
+    // Unsigned arithmetic wraps instead of raising signed-overflow exceptions.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0xFFFFFFFFu; cpu.state().gpr[2]=1u;
+        put(bus,0,r_type(1,2,3,0,0x21)); // ADDU
+        put(bus,4,r_type(2,1,4,0,0x23)); // SUBU
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==0u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[4]==2u);
+    }
+
     return 0;
 }
