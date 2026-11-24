@@ -97,7 +97,9 @@ GpuTimingEvents Gpu::advanceTiming(std::uint32_t cpuCycles) noexcept {
             scanlineClock_ = 0;
             scanline_ = (scanline_ + 1u) % linesPerFrame;
             hBlankActive_ = true;
+            const bool wasVBlank = vBlankActive_;
             vBlankActive_ = scanline_ < vStart || scanline_ >= vEnd;
+            if (!wasVBlank && vBlankActive_) events.vBlankStart = true;
         }
     }
 
