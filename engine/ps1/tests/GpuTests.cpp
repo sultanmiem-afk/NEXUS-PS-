@@ -148,7 +148,7 @@ int main() {
     // Variable-size textured rectangle increments U/V across the sprite.
     vram.writePixel(4u, 5u, 0x03E0u);
     vram.writePixel(5u, 5u, 0x001Fu);
-    gpu.writeGp0(0x64000000u); // raw textured rectangle, variable dimensions.
+    gpu.writeGp0(0x66000000u); // raw textured rectangle, variable dimensions.
     gpu.writeGp0(830u | (100u << 16));
     gpu.writeGp0(4u | (5u << 8));
     gpu.writeGp0(2u | (1u << 16));
