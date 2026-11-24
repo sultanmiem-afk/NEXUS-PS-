@@ -819,7 +819,7 @@ int main() {
     gpu.writeGp0(0x01400000u); // 15-bit texpage with ABR=2 (B-F).
     gpu.writeGp0(270u | (290u << 16u));
     gpu.writeGp0(0u);
-    assert(vram.readPixel(275u,275u,pixel) && pixel==7u);
+    assert(vram.readPixel(275u,275u,pixel) && pixel==0x8007u);
 
     // GP1(01h) clears queued FIFO words as well as partial packet state.
     gpu.enqueueGp0(0x020000FFu);
