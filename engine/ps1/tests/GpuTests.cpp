@@ -492,15 +492,13 @@ int main() {
     // deliberately resemble valid commands (notably A0000000 / image transfer).
     const std::uint8_t unsupportedOpcodes[] = {
         0x21u, 0x22u, 0x23u, 0x2Au, 0x32u, 0x3Au,
-        0x34u, 0x35u, 0x36u, 0x37u, 0x3Cu, 0x3Du, 0x3Eu, 0x3Fu,
-        0x80u
+        0x34u, 0x35u, 0x36u, 0x37u, 0x3Cu, 0x3Du, 0x3Eu, 0x3Fu
     };
     const std::size_t unsupportedLengths[] = {
         4u, 4u, 4u, 5u, 6u, 8u,
-        9u, 9u, 9u, 9u, 12u, 12u, 12u, 12u,
-        4u
+        9u, 9u, 9u, 9u, 12u, 12u, 12u, 12u
     };
-    for (std::size_t command = 0; command < 15u; ++command) {
+    for (std::size_t command = 0; command < 14u; ++command) {
         gpu.reset();
         gpu.writeGp0(static_cast<std::uint32_t>(unsupportedOpcodes[command]) << 24u);
         for (std::size_t word = 1u; word < unsupportedLengths[command]; ++word)
@@ -687,5 +685,83 @@ int main() {
     gpu.writeGp0(740u | (320u << 16));
     gpu.writeGp0(0u);
     assert(vram.readPixel(745u, 305u, pixel));
+
+    // Rectangles and sprites: variable-size, fixed-size and textured paths.
+    gpu.reset();
+    gpu.writeGp0(0x600000FFu);
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(3u | (2u << 16u));
+    assert(vram.readPixel(102u,101u,pixel) && pixel==0x001Fu);
+    gpu.writeGp0(0x6800FF00u);
+    gpu.writeGp0(120u | (120u << 16u));
+    assert(vram.readPixel(120u,120u,pixel) && pixel==0x03E0u);
+    gpu.writeGp0(0x700000FFu);
+    gpu.writeGp0(140u | (140u << 16u));
+    assert(vram.readPixel(147u,147u,pixel) && pixel==0x001Fu);
+    gpu.writeGp0(0x7800FF00u);
+    gpu.writeGp0(160u | (160u << 16u));
+    assert(vram.readPixel(175u,175u,pixel) && pixel==0x03E0u);
+    // Textured sprite in 15-bit mode; raw-texture flag is bit 0.
+    vram.writePixel(300u,200u,0x7C00u);
+    gpu.writeGp0(0xE1000100u); // 15-bit page 0, ABR=0.
+    gpu.writeGp0(0x65000000u);
+    gpu.writeGp0(200u | (200u << 16u));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(2u | (2u << 16u));
+    assert(vram.readPixel(200u,200u,pixel) && pixel==0x7C00u);
+    // Next packet must remain aligned after textured sprite, including poison payload.
+    gpu.writeGp0(0xA0000000u); // image-transfer command starts only at packet boundary.
+    gpu.writeGp0(0u); gpu.writeGp0(0u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(850u | (400u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(850u,400u,pixel) && pixel==0x001Fu);
+
+    // Fill dimensions are masked and bounded; zero encodes full 1024x512.
+    gpu.reset();
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(16u | (16u << 16u));
+    gpu.writeGp0(0u | (1u << 16u)); // width zero -> 1024, one row only.
+    assert(vram.readPixel(1023u,16u,pixel) && pixel==0x001Fu);
+    assert(vram.readPixel(15u,16u,pixel) && pixel==0x001Fu);
+
+    // VRAM-to-VRAM copy wraps at 1024x512 and consumes exactly four words.
+    gpu.reset();
+    vram.writePixel(1022u,510u,0x1234u);
+    vram.writePixel(1023u,510u,0x2345u);
+    vram.writePixel(0u,511u,0x3456u);
+    gpu.writeGp0(0x80000000u);
+    gpu.writeGp0(1022u | (510u << 16u));
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(3u | (2u << 16u));
+    assert(vram.readPixel(100u,100u,pixel) && pixel==0x1234u);
+    assert(vram.readPixel(101u,100u,pixel) && pixel==0x2345u);
+    assert(vram.readPixel(102u,101u,pixel) && pixel==0x3456u);
+    gpu.writeGp0(0x020000FFu); gpu.writeGp0(900u | (400u << 16u)); gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(900u,400u,pixel) && pixel==0x001Fu);
+
+    // GP1 reset/flush/info/status fields.
+    gpu.reset();
+    gpu.writeGp1(0x03000001u);
+    assert((gpu.readStatus() & (1u<<23)) != 0u);
+    gpu.writeGp1(0x03000000u);
+    assert((gpu.readStatus() & (1u<<23)) == 0u);
+    gpu.writeGp1(0x04000003u);
+    assert(((gpu.readStatus()>>29)&3u)==3u);
+    gpu.writeGp1(0x08000045u);
+    auto st=gpu.readStatus();
+    assert(((st>>16)&1u)==1u && ((st>>17)&3u)==1u);
+    gpu.writeGp1(0x10000007u);
+    assert(gpu.readGp0()==2u);
+    gpu.writeGp0(0xE2001234u);
+    gpu.writeGp1(0x10000002u);
+    assert(gpu.readGp0()==0x1234u);
+    gpu.writeGp0(0x020000FFu); gpu.writeGp0(910u | (410u << 16u)); gpu.writeGp0(1u | (1u << 16u));
+    gpu.writeGp0(0xA0000000u); // Partial transfer state.
+    gpu.writeGp1(0x01000000u); // Flush must cancel packet/transfer and clear FIFO.
+    assert((gpu.readStatus()&(1u<<26))!=0u);
+    gpu.writeGp0(0x020000FFu); gpu.writeGp0(920u | (410u << 16u)); gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(920u,410u,pixel) && pixel==0x001Fu);
+
     return 0;
 }
