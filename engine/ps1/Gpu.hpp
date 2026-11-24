@@ -53,6 +53,7 @@ struct GpuTimingEvents {
     std::uint32_t hBlankPulses = 0;
     bool hBlankActive = false;
     bool vBlankActive = false;
+    bool vBlankStart = false;
 };
 
 // Early GP0/GP1 command processor. This is a functional subset, not a
