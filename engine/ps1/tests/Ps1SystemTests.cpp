@@ -42,7 +42,19 @@ int main() {
     assert(system.vram().readPixel(0, 0, pixel));
     assert(pixel == 0x001Fu);
 
-    // Interrupt MMIO updates I_STAT/I_MASK and drives the CP0 hardware pending bit.\n    system.reset(0x00000000u);\n    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 3));\n    system.memory().interrupts().request(1u << 3);\n    assert(system.memory().interrupts().active());\n    assert(system.step().cpu.status == CpuStepStatus::Executed);\n    assert((system.cpu().cop0().read(Cop0::kCause) & (1u << 10)) != 0u);\n    assert(system.memory().write32(InterruptController::kStatusAddress, ~(1u << 3)));\n    assert(!system.memory().interrupts().active());\n    assert(system.step().cpu.status == CpuStepStatus::Executed);\n    assert((system.cpu().cop0().read(Cop0::kCause) & (1u << 10)) == 0u);\n\n    // BIOS loading validates exact image size and remains loaded across reset.
+    // Interrupt MMIO updates I_STAT/I_MASK and drives the CP0 hardware pending bit.
+    system.reset(0x00000000u);
+    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 3));
+    system.memory().interrupts().request(1u << 3);
+    assert(system.memory().interrupts().active());
+    assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert((system.cpu().cop0().read(Cop0::kCause) & (1u << 10)) != 0u);
+    assert(system.memory().write32(InterruptController::kStatusAddress, ~(1u << 3)));
+    assert(!system.memory().interrupts().active());
+    assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert((system.cpu().cop0().read(Cop0::kCause) & (1u << 10)) == 0u);
+
+    // BIOS loading validates exact image size and remains loaded across reset.
     std::vector<std::uint8_t> bios(BiosRom::kSize, 0);
     assert(system.loadBios(bios));
     assert(system.memory().bios().loaded());
