@@ -33,9 +33,10 @@ int main() {
     putWord(system.memory().ram(), 16, 0xAC220000u); // SW r2, 0(r1): GP0 fill command
     putWord(system.memory().ram(), 20, 0x24020000u); // ADDIU r2, r0, 0
     putWord(system.memory().ram(), 24, 0xAC220000u); // top-left (0,0)
-    putWord(system.memory().ram(), 28, 0x24020101u); // width=1, height=1
-    putWord(system.memory().ram(), 32, 0xAC220000u); // dimensions
-    for (int i = 0; i < 9; ++i)
+    putWord(system.memory().ram(), 28, 0x3C020001u); // LUI r2, 1 (height in high half)
+    putWord(system.memory().ram(), 32, 0x34420001u); // ORI r2, r2, 1 (width=1)
+    putWord(system.memory().ram(), 36, 0xAC220000u); // dimensions
+    for (int i = 0; i < 10; ++i)
         assert(system.step().cpu.status == CpuStepStatus::Executed);
     std::uint16_t pixel = 0;
     assert(system.vram().readPixel(0, 0, pixel));
