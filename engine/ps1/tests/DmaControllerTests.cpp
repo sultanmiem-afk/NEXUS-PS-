@@ -340,8 +340,9 @@ int main() {
     gpu.writeGp0(0x01000000u); // X=0, Y=256.
     gpu.writeGp0(0x01000400u); // 1024 pixels x 256 rows = 131072 words.
     assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x00000u));
-    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 131072u));
-    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000001u));
+    // Request mode: 4 blocks x 32768 words; manual mode has a 16-bit count.
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 0x00048000u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000201u));
     assert(dma.executeGpuTransfer(ram, gpu));
     assert(dma.lastTransferWords() == 131072u);
 
@@ -349,8 +350,8 @@ int main() {
     gpu.writeGp0(0x01000000u);
     gpu.writeGp0(0x01000400u);
     assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x80000u));
-    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 131072u));
-    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000000u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x24u, 0x00048000u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000200u));
     assert(dma.executeGpuTransfer(ram, gpu));
     assert(dma.lastTransferWords() == 131072u);
     for (std::uint32_t i = 0; i < 131072u; ++i) {
