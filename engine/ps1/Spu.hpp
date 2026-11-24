@@ -23,6 +23,9 @@ public:
         std::uint16_t currentAdsrVolume = 0;
         std::uint16_t repeatAddress = 0;
         bool keyedOn = false;
+        bool adpcmBlockValid = false;
+        bool adpcmEnd = false;
+        bool adpcmRepeat = false;
     };
 
     Spu() noexcept { reset(); }
@@ -38,6 +41,10 @@ public:
     bool voiceState(std::size_t index, VoiceState& value) const noexcept;
     std::uint32_t keyOnMask() const noexcept { return keyOnMask_; }
     std::uint32_t keyOffMask() const noexcept { return keyOffMask_; }
+    bool decodeAdpcmBlock(std::uint32_t ramAddress, std::array<std::int16_t, 28>& samples,
+                          std::int32_t& history1, std::int32_t& history2,
+                          bool& endFlag, bool& repeatFlag) const noexcept;
+    bool voiceSamples(std::size_t index, std::array<std::int16_t, 28>& samples) const noexcept;
 
     bool readRam8(std::uint32_t address, std::uint8_t& value) const noexcept;
     bool readRam16(std::uint32_t address, std::uint16_t& value) const noexcept;
@@ -51,11 +58,15 @@ private:
     std::array<std::uint8_t, kRamSize> ram_{};
     std::array<std::uint16_t, kRegisterCount> registers_{};
     std::array<VoiceState, kVoiceCount> voices_{};
+    std::array<std::array<std::int16_t, 28>, kVoiceCount> voiceSamples_{};
+    std::array<std::int32_t, kVoiceCount> adpcmHistory1_{};
+    std::array<std::int32_t, kVoiceCount> adpcmHistory2_{};
     std::uint32_t keyOnMask_ = 0;
     std::uint32_t keyOffMask_ = 0;
 
     static bool isMappedRegister(std::uint32_t offset) noexcept;
     void applyKeyMask(std::uint32_t mask, bool keyOn) noexcept;
+    bool decodeVoiceBlock(std::size_t index) noexcept;
 };
 
 } // namespace nexus::ps1
