@@ -702,7 +702,7 @@ void Gpu::executeRectangle() noexcept {
     const int x0=std::max({0,l,x}),y0=std::max({0,t,y});
     const int x1=std::min({static_cast<int>(Vram::kWidth),r+1,x+static_cast<int>(w)});
     const int y1=std::min({static_cast<int>(Vram::kHeight),b+1,y+static_cast<int>(h)});
-    const bool semi=(op&2u)!=0u; const unsigned mode=(drawMode_>>5)&3u;
+    const bool semi=(op&1u)!=0u; const unsigned mode=(drawMode_>>5)&3u;
     const unsigned sr=src&31u,sg=(src>>5)&31u,sb=(src>>10)&31u;
     auto blend=[mode](unsigned f,unsigned back){switch(mode){case 0:return(f+back)>>1;case 1:return std::min(31u,f+back);case 2:return back>f?back-f:0u;default:return std::min(31u,back+(f>>2));}};
     for(int py=y0;py<y1;++py)for(int px=x0;px<x1;++px){
@@ -730,7 +730,7 @@ void Gpu::executeTexturedRectangle() noexcept {
     const unsigned depth=(drawMode_>>7)&3u;if(depth==3u){++unsupportedCommandCount_;return;}
     const std::uint32_t px=(drawMode_&15u)*64u,py=((drawMode_>>4)&1u)*256u;
     const std::uint32_t mx=textureWindow_&31u,my=(textureWindow_>>5)&31u,wx=(textureWindow_>>10)&31u,wy=(textureWindow_>>15)&31u;
-    const bool raw=(op&1u)!=0u,semi=(op&2u)!=0u;const unsigned mode=(drawMode_>>5)&3u;
+    const bool raw=(op&2u)!=0u,semi=(op&1u)!=0u;const unsigned mode=(drawMode_>>5)&3u;
     const int l=drawAreaTopLeft_&1023u,t=(drawAreaTopLeft_>>10)&511u,r=drawAreaBottomRight_&1023u,b=(drawAreaBottomRight_>>10)&511u;
     const int x0=std::max({0,l,ox}),y0=std::max({0,t,oy}),x1=std::min({static_cast<int>(Vram::kWidth),r+1,ox+static_cast<int>(w)}),y1=std::min({static_cast<int>(Vram::kHeight),b+1,oy+static_cast<int>(h)});
     const unsigned cr=packet_[0]&255u,cg=(packet_[0]>>8)&255u,cb=(packet_[0]>>16)&255u;
