@@ -72,6 +72,14 @@ int main() {
     assert(bus.write32(0x1F801104u, 0u));
     assert(bus.read32(0x1F801100u, word) && word == 0u);
 
+    // Timer 1 counter/mode/target registers are mapped at 1F801110-118.
+    assert(bus.write32(0x1F801118u, 456u));
+    assert(bus.write32(0x1F801110u, 9u));
+    assert(bus.read32(0x1F801110u, word) && word == 9u);
+    assert(bus.read32(0x1F801118u, word) && word == 456u);
+    assert(bus.write32(0x1F801114u, 0u));
+    assert(bus.read32(0x1F801110u, word) && word == 0u);
+
     // Alignment rules apply to halfword and word accesses.
     std::uint16_t half = 0;
     assert(!bus.read16(0x1F800001u, half));
