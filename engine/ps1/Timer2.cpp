@@ -24,7 +24,7 @@ bool Timer2::advanceTicks(std::uint32_t ticks) noexcept {
     bool irq = false;
     for (std::uint32_t i = 0; i < ticks; ++i) {
         const std::uint32_t next = static_cast<std::uint32_t>(counter_) + 1u;
-        const bool targetHit = next == target_;
+        const bool targetHit = next == target_ || (overflow && target_ == 0u);
         const bool overflow = next > 0xFFFFu;
         if (targetHit) reachedTarget_ = true;
         if (overflow) reachedOverflow_ = true;
@@ -32,8 +32,13 @@ bool Timer2::advanceTicks(std::uint32_t ticks) noexcept {
         const bool event = (targetHit && (mode_ & kIrqAtTarget) != 0u) ||
                            (overflow && (mode_ & kIrqAtOverflow) != 0u);
         if (event && ((mode_ & kIrqRepeat) != 0u || irqArmed_)) {
-            irq = true;
-            irqRequest_ = false;
+            if ((mode_ & kIrqToggle) != 0u) {
+                irqRequest_ = !irqRequest_;
+                irq = !irqRequest_; // Interrupt on the active (high-to-low) transition.
+            } else {
+                irqRequest_ = false;
+                irq = true;
+            }
             if ((mode_ & kIrqRepeat) == 0u) irqArmed_ = false;
         }
 
