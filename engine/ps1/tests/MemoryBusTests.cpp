@@ -33,7 +33,7 @@ int main() {
     assert(!bus.read32(0x1F801000u, word));
 
     // Alignment rules apply to halfword and word accesses.
-    assert(!bus.read16(0x1F800001u, *reinterpret_cast<std::uint16_t*>(&word)));
+    std::uint16_t half = 0;\n    assert(!bus.read16(0x1F800001u, half));
 
     bus.clear();
     assert(bus.read32(0x00000020u, word) && word == 0u);
