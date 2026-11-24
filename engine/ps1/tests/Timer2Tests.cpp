@@ -20,7 +20,7 @@ int main() {
 
     // Timer 2 /8 source preserves divider phase across separate advances.
     assert(timer.write32(Timer2::kTargetAddress, 1u));
-    assert(timer.write32(Timer2::kModeAddress, (1u << 8) | (1u << 4)));
+    assert(timer.write32(Timer2::kModeAddress, (1u << 9) | (1u << 4)));
     assert(!timer.advance(7u));
     assert(timer.counter() == 0u);
     assert(timer.advance(1u));
