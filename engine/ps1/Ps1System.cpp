@@ -28,6 +28,7 @@ SystemStepResult Ps1System::step() {
     result.cpu = cpu_.step();
     result.timer0Irq = memory_.timer0().advance(result.cpu.cycles);
     result.timer1Irq = memory_.timer1().advance(result.cpu.cycles);
+    result.timer2Irq = memory_.timer2().advance(result.cpu.cycles);
 
     // GPU timing emits dot-clock and HBlank events for the two GPU-clocked timers.
     const GpuTimingEvents gpuTiming = gpu_.advanceTiming(result.cpu.cycles);
@@ -40,6 +41,8 @@ SystemStepResult Ps1System::step() {
         memory_.interrupts().request(1u << 4); // I_STAT Timer 0 source
     if (result.timer1Irq)
         memory_.interrupts().request(1u << 5); // I_STAT Timer 1 source
+    if (result.timer2Irq)
+        memory_.interrupts().request(1u << 6); // I_STAT Timer 2 source
     result.dmaTransferred = memory_.dma().executeGpuTransfer(memory_.ram(), gpu_);
     if (result.dmaTransferred)
         result.dmaWords = memory_.dma().lastTransferWords();
