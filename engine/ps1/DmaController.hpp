@@ -33,6 +33,7 @@ public:
     std::uint32_t channelControl(std::size_t channel) const noexcept;
     std::uint32_t dpcr() const noexcept { return dpcr_; }
     std::uint32_t dicr() const noexcept;
+    bool irqPending() const noexcept { return masterIrq(); }
 
 private:
     struct Channel {
