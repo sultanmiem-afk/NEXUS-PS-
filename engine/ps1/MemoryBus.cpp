@@ -4,6 +4,7 @@ namespace nexus::ps1 {
 
 void MemoryBus::clear() noexcept {
     ram_.clear();
+    cdrom_.reset();
     scratchpad_.clear();
     dma_.reset();
     interrupts_.reset();
@@ -13,6 +14,7 @@ void MemoryBus::clear() noexcept {
 }
 
 bool MemoryBus::read8(std::uint32_t address, std::uint8_t& value) {
+    if (cdrom_.read8(address, value)) return true;
     if (ram_.read8(address, value)) return true;
     if (scratchpad_.read8(address, value)) return true;
     return bios_.read8(address, value);
@@ -36,6 +38,7 @@ bool MemoryBus::read32(std::uint32_t address, std::uint32_t& value) {
 }
 
 bool MemoryBus::write8(std::uint32_t address, std::uint8_t value) {
+    if (cdrom_.write8(address, value)) return true;
     if (ram_.write8(address, value)) return true;
     return scratchpad_.write8(address, value);
 }
