@@ -1,7 +1,8 @@
 #include "MemoryBus.hpp"
 
 #include <cassert>
-#include <cstdint>\n#include <vector>
+#include <cstdint>
+#include <vector>
 
 using namespace nexus::ps1;
 
@@ -29,11 +30,17 @@ int main() {
     // Out-of-range scratchpad, BIOS, and not-yet-implemented MMIO fail cleanly.
     std::uint8_t byte = 0;
     assert(!bus.read8(0x1F800400u, byte));
-    assert(!bus.read32(0x1FC00000u, word));\n    std::vector<std::uint8_t> biosImage(BiosRom::kSize, 0x5Au);\n    assert(bus.bios().load(biosImage));\n    assert(bus.read32(0x1FC00000u, word) && word == 0x5A5A5A5Au);\n    assert(!bus.write32(0x1FC00000u, 0xFFFFFFFFu));\n    assert(bus.read32(0xBFC00000u, word) && word == 0x5A5A5A5Au);
+    assert(!bus.read32(0x1FC00000u, word));
+    std::vector<std::uint8_t> biosImage(BiosRom::kSize, 0x5Au);
+    assert(bus.bios().load(biosImage));
+    assert(bus.read32(0x1FC00000u, word) && word == 0x5A5A5A5Au);
+    assert(!bus.write32(0x1FC00000u, 0xFFFFFFFFu));
+    assert(bus.read32(0xBFC00000u, word) && word == 0x5A5A5A5Au);
     assert(!bus.read32(0x1F801000u, word));
 
     // Alignment rules apply to halfword and word accesses.
-    std::uint16_t half = 0;\n    assert(!bus.read16(0x1F800001u, half));
+    std::uint16_t half = 0;
+    assert(!bus.read16(0x1F800001u, half));
 
     bus.clear();
     assert(bus.read32(0x00000020u, word) && word == 0u);
