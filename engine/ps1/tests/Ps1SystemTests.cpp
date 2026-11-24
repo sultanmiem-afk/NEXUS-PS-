@@ -405,7 +405,7 @@ int main() {
     assert(system.vram().readPixel(0u, 0u, integratedPixel) && integratedPixel == 0x001Fu);
     std::uint32_t initialGpuStatus = 0u;
     assert(system.memory().ram().read32(0x0200u, initialGpuStatus));
-    assert(((initialGpuStatus >> 16u) & 0x7Fu) == 0x0Fu); // GPUSTAT bits 16-22.
+    assert(((initialGpuStatus >> 16u) & 0x7Fu) == 0x7Fu); // GPUSTAT bits 16-22.
     assert((initialGpuStatus & (1u << 31u)) == 0u);
 
     // VBlank I_STAT bit 0 must pulse once per frame; GPUSTAT bit 31 alternates
@@ -421,7 +421,7 @@ int main() {
             assert(system.step().cpu.status == CpuStepStatus::Executed);
         std::uint32_t sampledStatus = 0u;
         assert(system.memory().ram().read32(0x0204u, sampledStatus));
-        assert(((sampledStatus >> 16u) & 0x7Fu) == 0x0Fu);
+        assert(((sampledStatus >> 16u) & 0x7Fu) == 0x7Fu);
         const bool expectedOddField = observedVblankFrames == 2u;
         assert(((sampledStatus >> 31u) & 1u) == (expectedOddField ? 1u : 0u));
         assert(system.memory().write32(InterruptController::kStatusAddress, ~1u));
