@@ -1,6 +1,19 @@
 #include "MemoryBus.hpp"
 
 namespace nexus::ps1 {
+namespace {
+std::uint32_t normalizeKseg1(std::uint32_t address) noexcept {
+    return (address >= 0xA0000000u && address < 0xC0000000u)
+        ? (address & 0x1FFFFFFFu) : address;
+}
+bool ignoredWriteAddress(std::uint32_t address) noexcept {
+    return address == 0x1F801000u || address == 0x1F801060u ||
+           address == 0xFFFE0130u || address == 0x1F802041u;
+}
+bool ignoredReadAddress(std::uint32_t address) noexcept {
+    return ignoredWriteAddress(address) || address == 0x1F801044u;
+}
+}
 
 void MemoryBus::clear() noexcept {
     ram_.clear();
@@ -15,6 +28,9 @@ void MemoryBus::clear() noexcept {
 }
 
 bool MemoryBus::read8(std::uint32_t address, std::uint8_t& value) {
+    address = normalizeKseg1(address);
+    if (ignoredReadAddress(address)) { value = 0; return true; }
+
     if (cdrom_.read8(address, value)) return true;
     if (ram_.read8(address, value)) return true;
     if (scratchpad_.read8(address, value)) return true;
@@ -22,6 +38,9 @@ bool MemoryBus::read8(std::uint32_t address, std::uint8_t& value) {
 }
 
 bool MemoryBus::read16(std::uint32_t address, std::uint16_t& value) {
+    address = normalizeKseg1(address);
+    if (ignoredReadAddress(address)) { value = 0; return true; }
+
     if (address >= 0x1F801C00u && address < 0x1F801E00u)
         return spu_.readRegister16(address - 0x1F801C00u, value);
     if (address == InterruptController::kStatusAddress || address == InterruptController::kMaskAddress) {
@@ -47,6 +66,9 @@ bool MemoryBus::read16(std::uint32_t address, std::uint16_t& value) {
 }
 
 bool MemoryBus::read32(std::uint32_t address, std::uint32_t& value) {
+    address = normalizeKseg1(address);
+    if (ignoredReadAddress(address)) { value = 0; return true; }
+
     if (ram_.read32(address, value)) return true;
     if (scratchpad_.read32(address, value)) return true;
     if (dma_.read32(address, value)) return true;
@@ -58,12 +80,18 @@ bool MemoryBus::read32(std::uint32_t address, std::uint32_t& value) {
 }
 
 bool MemoryBus::write8(std::uint32_t address, std::uint8_t value) {
+    address = normalizeKseg1(address);
+    if (ignoredWriteAddress(address)) return true;
+
     if (cdrom_.write8(address, value)) return true;
     if (ram_.write8(address, value)) return true;
     return scratchpad_.write8(address, value);
 }
 
 bool MemoryBus::write16(std::uint32_t address, std::uint16_t value) {
+    address = normalizeKseg1(address);
+    if (ignoredWriteAddress(address)) return true;
+
     if (address >= 0x1F801C00u && address < 0x1F801E00u)
         return spu_.writeRegister16(address - 0x1F801C00u, value);
     if (address == InterruptController::kStatusAddress || address == InterruptController::kMaskAddress)
@@ -79,6 +107,9 @@ bool MemoryBus::write16(std::uint32_t address, std::uint16_t value) {
 }
 
 bool MemoryBus::write32(std::uint32_t address, std::uint32_t value) {
+    address = normalizeKseg1(address);
+    if (ignoredWriteAddress(address)) return true;
+
     if (ram_.write32(address, value)) return true;
     if (scratchpad_.write32(address, value)) return true;
     if (dma_.write32(address, value)) return true;
