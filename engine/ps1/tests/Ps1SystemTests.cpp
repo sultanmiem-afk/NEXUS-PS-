@@ -35,6 +35,14 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::Executed);
     assert(system.cpu().state().gpr[2] == 50u);
 
+    // The system derives 44.1 kHz SPU output frames from accumulated CPU cycles.
+    system.reset(0x00000000u);
+    for (unsigned i = 0; i < 800u; ++i)
+        assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert(system.queuedAudioSamples() >= 1u);
+    Spu::StereoSample systemAudio{};
+    assert(system.popAudioSample(systemAudio));
+
     // CPU can write/read SPU voice registers through 16-bit MMIO.
     system.reset(0x00000000u);
     putWord(system.memory().ram(), 0, 0x3C011F80u); // LUI r1, 1F80
