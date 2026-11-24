@@ -9,7 +9,7 @@ an early portable interpreter and CP0 foundation.
 - HI/LO registers and PC/next-PC state.
 - MIPS instruction field decoder and reset-vector initialization.
 - Bus interface for the future PS1 memory subsystem.
-- 2 MiB main RAM device with little-endian byte/halfword/word access.
+- 2 MiB main RAM device with little-endian byte/halfword/word access.\n- Separate 1 KiB CPU scratchpad mapped at physical address `0x1F800000`.\n- Initial CPU memory bus connecting RAM mirrors and scratchpad, with explicit faults for unmapped BIOS/MMIO regions.
 - RAM address decoding for the 8 MiB physical mirror window and KSEG0/KSEG1 aliases.
 - RAM clear/reset support and separate-device rejection for scratchpad/BIOS addresses.
 - Integer shifts, arithmetic/logical operations, comparisons, multiply/divide,
@@ -23,7 +23,7 @@ an early portable interpreter and CP0 foundation.
 - MFC0, MTC0, and RFE instruction handling.
 - Initial exception entry for syscall, breakpoint, reserved instruction,
   arithmetic overflow, and misaligned instruction/data addresses.
-- Initial CMake build target and unit tests for arithmetic, branch delay, load-delay hazards, and RAM mapping/access.
+- Initial CMake build target and unit tests for arithmetic, branch delay, load-delay hazards, and RAM mapping/access, scratchpad mapping, and memory-bus routing.
 - GitHub Actions workflow to compile the CPU target and run its tests.
 
 ## Important accuracy limits
