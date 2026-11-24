@@ -1,4 +1,5 @@
 #include "CpuCore.hpp"
+#include "Cop0.hpp"
 
 #include <array>
 #include <cassert>
@@ -230,5 +231,60 @@ int main() {
         assert(cpu.state().lo==0xFFFFFFFFu && cpu.state().hi==123u);
     }
 
+
+    // CP0 exception entry: EPC, Cause.ExcCode, BD, and normal exception vector.
+    {
+        Cop0 cp0;
+        CpuState cpu;
+        cp0.reset();
+        cpu.reset(0);
+        cp0.write(Cop0::kStatus, 0x00000015u);
+        cp0.enter_exception(cpu, CpuException::Syscall, 0x00001000u, false);
+        assert(cpu.pc == 0x80000080u && cpu.next_pc == 0x80000084u);
+        assert(cp0.read(Cop0::kEpc) == 0x00001000u);
+        assert(((cp0.read(Cop0::kCause) >> 2) & 0x1Fu) ==
+               static_cast<std::uint32_t>(CpuException::Syscall));
+        assert((cp0.read(Cop0::kCause) & Cop0::kCauseBranchDelay) == 0);
+        assert((cp0.read(Cop0::kStatus) & 0x3Fu) == 0x0000003Du);
+    }
+    // CP0 delay-slot exception records the branch PC and sets Cause.BD.
+    {
+        Cop0 cp0;
+        CpuState cpu;
+        cp0.reset();
+        cpu.reset(0);
+        cp0.enter_exception(cpu, CpuException::Breakpoint, 0x00002004u, true);
+        assert(cp0.read(Cop0::kEpc) == 0x00002000u);
+        assert((cp0.read(Cop0::kCause) & Cop0::kCauseBranchDelay) != 0);
+        assert(((cp0.read(Cop0::kCause) >> 2) & 0x1Fu) ==
+               static_cast<std::uint32_t>(CpuException::Breakpoint));
+    }
+    // BEV selects the bootstrap exception vector; address faults update BadVaddr.
+    {
+        Cop0 cp0;
+        CpuState cpu;
+        cp0.reset();
+        cpu.reset(0);
+        cp0.write(Cop0::kStatus, Cop0::kStatusBev);
+        cp0.enter_exception(cpu, CpuException::AddressStore, 0x00003000u,
+                            false, 0x00001234u);
+        assert(cpu.pc == 0xBFC00180u && cpu.next_pc == 0xBFC00184u);
+        assert(cp0.read(Cop0::kBadVaddr) == 0x00001234u);
+    }
+    // CP0 write masks and RFE restore the previous KU/IE mode stack.
+    {
+        Cop0 cp0;
+        cp0.reset();
+        cp0.write(Cop0::kCause, 0xFFFFFFFFu);
+        assert(cp0.read(Cop0::kCause) == 0x00000300u);
+        cp0.write(Cop0::kBadVaddr, 0x12345678u);
+        assert(cp0.read(Cop0::kBadVaddr) == 0u);
+        cp0.write(Cop0::kStatus, 0x00000015u);
+        cp0.enter_exception(*([]() -> CpuState* { static CpuState s; s.reset(0); return &s; })(),
+                            CpuException::Syscall, 0x400u, false);
+        cp0.return_from_exception();
+        assert((cp0.read(Cop0::kStatus) & 0x3Fu) == 0x00000015u);
+    }
+
     return 0;
-}
+
