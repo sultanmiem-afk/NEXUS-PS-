@@ -184,6 +184,10 @@ int main() {
         " TRACK 01 MODE1/2048\n"
         " INDEX 01 00:02:00\n";
     assert(system.loadDiscCue(testCue, "bios-test.bin", testDisc));
+    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 2));
+    assert(system.memory().write8(0x1F801800u, 1u)); // Select CD-ROM IRQ enable register.
+    assert(system.memory().write8(0x1F801802u, 0x04u)); // Enable command-complete IRQ.
+    assert(system.memory().write8(0x1F801800u, 0u));
     std::vector<std::uint8_t> syntheticBios(BiosRom::kSize, 0u);
     const std::uint32_t biosProgram[] = {
         0x3C011F80u,                         // LUI r1, 1F80
@@ -208,6 +212,10 @@ int main() {
     assert(system.memory().cdrom().reading());
     system.memory().cdrom().advance(Cdrom::kCyclesPerSector);
     assert(system.memory().cdrom().dataAvailableBytes() == 2048u);
+    assert((system.memory().interrupts().status() & (1u << 2)) != 0u);
+    system.cpu().cop0().write(Cop0::kStatus, (1u << 0) | (1u << 10));
+    assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(system.cpu().state().pc == 0x80000080u);
     std::uint8_t bootSectorByte = 0u;
     assert(system.memory().read8(0x1F801802u, bootSectorByte));
     assert(bootSectorByte == 0x80u);
