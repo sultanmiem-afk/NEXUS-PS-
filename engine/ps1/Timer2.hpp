@@ -18,7 +18,7 @@ public:
 
     // Returns true when this advance generates a Timer 2 IRQ event.
     bool advance(std::uint32_t cpuCycles) noexcept;
-    bool read32(std::uint32_t address, std::uint32_t& value) const noexcept;
+    bool read32(std::uint32_t address, std::uint32_t& value) noexcept;
     bool write32(std::uint32_t address, std::uint32_t value) noexcept;
 
 private:
