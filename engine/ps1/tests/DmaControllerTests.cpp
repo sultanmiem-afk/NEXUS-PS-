@@ -439,6 +439,43 @@ int main() {
     assert(ram.read32(0x3000u, value) && value == 0x31313131u);
     assert(ram.read32(0x3200u, value) && value == 0x72727272u);
 
+    // Three consecutive CD-ROM sectors feed one multi-block DMA request.
+    DmaController multiSectorDma;
+    Cdrom multiSectorCdrom;
+    std::vector<std::uint8_t> threeSectors(3u * 2048u, 0u);
+    for (std::size_t i = 0; i < threeSectors.size(); ++i)
+        threeSectors[i] = static_cast<std::uint8_t>(0x20u + (i / 2048u));
+    assert(multiSectorCdrom.loadImage(threeSectors));
+    multiSectorCdrom.write8(0x1F801800u, 0u);
+    multiSectorCdrom.write8(0x1F801802u, 0x00u);
+    multiSectorCdrom.write8(0x1F801802u, 0x02u);
+    multiSectorCdrom.write8(0x1F801802u, 0x00u);
+    multiSectorCdrom.write8(0x1F801801u, 0x02u);
+    multiSectorCdrom.write8(0x1F801801u, 0x06u);
+    assert(multiSectorDma.write32(DmaController::kDpcrAddress, 1u << 15));
+    assert(multiSectorDma.write32(DmaController::kDicrAddress, (1u << 23) | (1u << 19)));
+    assert(multiSectorDma.write32(DmaController::kBaseAddress + 0x30u, 0x4000u));
+    assert(multiSectorDma.write32(DmaController::kBaseAddress + 0x34u, 0x00030200u));
+    assert(multiSectorDma.write32(DmaController::kBaseAddress + 0x38u, 0x01000200u));
+
+    for (std::uint32_t sector = 0; sector < 3u; ++sector) {
+        multiSectorCdrom.advance(Cdrom::kCyclesPerSector);
+        assert(multiSectorCdrom.dataAvailableBytes() == 2048u);
+        assert(multiSectorDma.executeCdromTransfer(ram, multiSectorCdrom));
+        assert(multiSectorDma.lastCdromTransferWords() == 512u);
+        assert(multiSectorDma.base(3) == 0x4000u + (sector + 1u) * 2048u);
+        if (sector < 2u) {
+            assert((multiSectorDma.dicr() & (1u << 27)) == 0u);
+            assert((multiSectorDma.channelControl(3) & (1u << 24)) != 0u);
+        }
+    }
+    assert((multiSectorDma.dicr() & (1u << 27)) != 0u);
+    assert((multiSectorDma.dicr() & 0x80000000u) != 0u);
+    assert((multiSectorDma.channelControl(3) & (1u << 24)) == 0u);
+    assert(ram.read32(0x4000u, value) && value == 0x20202020u);
+    assert(ram.read32(0x4800u, value) && value == 0x21212121u);
+    assert(ram.read32(0x5000u, value) && value == 0x22222222u);
+
     dma.reset();
     assert(dma.read32(DmaController::kDpcrAddress, value) && value == 0x07654321u);
     assert(dma.read32(DmaController::kBaseAddress, value) && value == 0u);
