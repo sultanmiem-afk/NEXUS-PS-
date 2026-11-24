@@ -50,6 +50,10 @@ private:
     std::uint32_t dicrFlags_ = 0;
     std::uint32_t lastTransferWords_ = 0;
     std::uint32_t lastCdromTransferWords_ = 0;
+    bool cdromDmaActive_ = false;
+    std::uint32_t cdromDmaBlockSize_ = 0;
+    std::uint32_t cdromDmaBlocksRemaining_ = 0;
+    std::uint32_t cdromDmaWordsInBlock_ = 0;
 
     bool masterIrq() const noexcept;
     bool executeGpuLinearTransfer(Ram& ram, Gpu& gpu, std::uint32_t& address,
