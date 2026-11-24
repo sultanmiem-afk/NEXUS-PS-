@@ -43,6 +43,66 @@ int main() {
     Spu::StereoSample systemAudio{};
     assert(system.popAudioSample(systemAudio));
 
+    // KSEG1 aliases route to the same interrupt, DMA, timer and CD-ROM registers.
+    system.reset(0x00000000u);
+    std::uint32_t ioWord = 0u;
+    assert(system.memory().write32(0xBF801074u, 0x00000020u)); // I_MASK
+    assert(system.memory().read32(0x1F801074u, ioWord) && ioWord == 0x20u);
+    system.memory().interrupts().request(1u << 5);
+    assert(system.memory().read32(0xBF801070u, ioWord) && (ioWord & 0x20u) != 0u);
+    assert(system.memory().write32(0xBF8010F0u, 0x12345678u)); // DMA DPCR
+    assert(system.memory().read32(0x1F8010F0u, ioWord) && ioWord == 0x12345678u);
+    assert(system.memory().write16(0xBF801100u, 0x3456u)); // Timer 0 counter
+    std::uint16_t ioHalf = 0u;
+    assert(system.memory().read16(0x1F801100u, ioHalf) && ioHalf == 0x3456u);
+    assert(system.memory().write8(0xBF801800u, 0u)); // CD-ROM index
+    std::uint8_t ioByte = 0u;
+    assert(system.memory().read8(0x1F801800u, ioByte) && ioByte == 0x03u);
+
+    // BIOS early scratch/expansion accesses are benign: writes ignored, reads zero.
+    for (const std::uint32_t address : {0x1F801000u, 0x1F801060u, 0xFFFE0130u, 0x1F802041u}) {
+        assert(system.memory().write8(address, 0xA5u));
+        assert(system.memory().write16(address, 0xA5A5u));
+        assert(system.memory().write32(address, 0xA5A5A5A5u));
+        std::uint8_t b = 0xFFu;
+        std::uint16_t h = 0xFFFFu;
+        std::uint32_t w = 0xFFFFFFFFu;
+        assert(system.memory().read8(address, b) && b == 0u);
+        assert(system.memory().read16(address, h) && h == 0u);
+        assert(system.memory().read32(address, w) && w == 0u);
+    }
+    std::uint32_t ignoredWord = 0xFFFFFFFFu;
+    assert(system.memory().read32(0x1F801044u, ignoredWord) && ignoredWord == 0u);
+
+    // CPU KSEG1 store to GP0 is translated before GPU MMIO decode (no BusFault).
+    system.reset(0x00000000u);
+    putWord(system.memory().ram(), 0, 0x3C01BF80u); // LUI r1, BF80
+    putWord(system.memory().ram(), 4, 0x34211810u); // ORI r1, r1, 1810
+    putWord(system.memory().ram(), 8, 0x3C020200u);
+    putWord(system.memory().ram(), 12, 0x344200FFu);
+    putWord(system.memory().ram(), 16, 0xAC220000u);
+    putWord(system.memory().ram(), 20, 0x24020000u);
+    putWord(system.memory().ram(), 24, 0xAC220000u);
+    putWord(system.memory().ram(), 28, 0x3C020001u);
+    putWord(system.memory().ram(), 32, 0x34420001u);
+    putWord(system.memory().ram(), 36, 0xAC220000u);
+    for (int i = 0; i < 30; ++i) assert(system.step().cpu.status == CpuStepStatus::Executed);
+    std::uint16_t ksegPixel = 0u;
+    assert(system.vram().readPixel(0u, 0u, ksegPixel) && ksegPixel == 0x001Fu);
+
+    // VBlank rising edge requests I_STAT bit 0 and is observable by the CPU system.
+    system.reset(0x00000000u);
+    system.gpu().writeGp1(0x07000800u); // VBlank interval: scanlines [0, 2).
+    bool sawVblankIrq = false;
+    for (unsigned i = 0; i < 4400u; ++i) {
+        (void)system.step();
+        if ((system.memory().interrupts().status() & 1u) != 0u) {
+            sawVblankIrq = true;
+            break;
+        }
+    }
+    assert(sawVblankIrq);
+
     // CPU can write/read SPU voice registers through 16-bit MMIO.
     system.reset(0x00000000u);
     putWord(system.memory().ram(), 0, 0x3C011F80u); // LUI r1, 1F80
