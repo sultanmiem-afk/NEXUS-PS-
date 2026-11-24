@@ -781,11 +781,12 @@ int main() {
     assert(vram.readPixel(1023u,511u,pixel) && pixel==0x1111u);
     assert(vram.readPixel(0u,511u,pixel) && pixel==0x2222u);
     assert(vram.readPixel(1023u,0u,pixel) && pixel==0x4444u);
+    assert(vram.readPixel(0u,0u,pixel) && pixel==0xA000u);
     gpu.writeGp0(0xC0000000u);
     gpu.writeGp0(1023u | (511u << 16u));
     gpu.writeGp0(2u | (2u << 16u));
     assert(gpu.readGp0()==0x22221111u);
-    assert(gpu.readGp0()==0x00004444u);
+    assert(gpu.readGp0()==0xA0004444u);
 
     // Indexed 4-bit texture lookup uses CLUT X in 16-word units and CLUT Y.
     gpu.reset();
