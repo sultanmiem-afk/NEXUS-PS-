@@ -19,7 +19,7 @@ int main() {
     assert(vram.readPixel(15, 21, pixel) && pixel == 0x001Fu);
     assert(vram.readPixel(16, 20, pixel) && pixel == 0);
 
-    // GP0(A0h): CPU-to-VRAM transfer of four pixels.
+    // Set a full-screen drawing area before polygon tests.\n    gpu.writeGp0(0xE3000000u);\n    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10));\n\n    // GP0(20h): flat-shaded triangle.\n    gpu.writeGp0(0x200000FFu);\n    gpu.writeGp0(100u | (100u << 16));\n    gpu.writeGp0(120u | (100u << 16));\n    gpu.writeGp0(100u | (120u << 16));\n    assert(vram.readPixel(105, 105, pixel) && pixel == 0x001Fu);\n    assert(vram.readPixel(119, 119, pixel) && pixel == 0);\n\n    // GP0(28h): flat-shaded quad, split into two triangles.\n    gpu.writeGp0(0x2800FF00u);\n    gpu.writeGp0(200u | (200u << 16));\n    gpu.writeGp0(220u | (200u << 16));\n    gpu.writeGp0(200u | (220u << 16));\n    gpu.writeGp0(220u | (220u << 16));\n    assert(vram.readPixel(205, 205, pixel) && pixel == 0x03E0u);\n\n    // GP0(A0h): CPU-to-VRAM transfer of four pixels.
     gpu.writeGp0(0xA0000000u);
     gpu.writeGp0(30u | (40u << 16));
     gpu.writeGp0(2u | (2u << 16));
