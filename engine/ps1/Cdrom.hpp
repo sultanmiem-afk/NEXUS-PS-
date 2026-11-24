@@ -33,6 +33,8 @@ public:
     std::uint8_t interruptEnable() const noexcept { return interruptEnable_; }
     std::uint32_t currentLba() const noexcept { return currentLba_; }
     bool reading() const noexcept { return reading_; }
+    std::size_t dataAvailableBytes() const noexcept { return data_.size(); }
+    bool readDataWord(std::uint32_t& value) noexcept;
 
 private:
     struct Track {
