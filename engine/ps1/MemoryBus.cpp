@@ -5,6 +5,7 @@ namespace nexus::ps1 {
 void MemoryBus::clear() noexcept {
     ram_.clear();
     scratchpad_.clear();
+    dma_.reset();
 }
 
 bool MemoryBus::read8(std::uint32_t address, std::uint8_t& value) {
@@ -22,6 +23,7 @@ bool MemoryBus::read16(std::uint32_t address, std::uint16_t& value) {
 bool MemoryBus::read32(std::uint32_t address, std::uint32_t& value) {
     if (ram_.read32(address, value)) return true;
     if (scratchpad_.read32(address, value)) return true;
+    if (dma_.read32(address, value)) return true;
     return bios_.read32(address, value);
 }
 
