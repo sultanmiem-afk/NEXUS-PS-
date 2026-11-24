@@ -484,6 +484,61 @@ int main() {
         assert(cpu.state().gpr[2]==0x55443322u);
     }
 
+    // BLTZAL links only when its signed condition is true and always runs a delay slot.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0xFFFFFFFFu;
+        cpu.state().gpr[31]=0xDEADBEEFu;
+        put(bus,0,i_type(0x01,1,0x10,3)); // BLTZAL r1, +3
+        put(bus,4,i_type(0x09,0,2,51));   // delay slot
+        put(bus,16,i_type(0x09,0,3,52));  // branch target
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[31]==8u);
+        assert(cpu.state().pc==4u && cpu.state().next_pc==16u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==51u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==52u);
+    }
+    // A not-taken BLTZAL does not change the link register but still has a delay slot.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=1u;
+        cpu.state().gpr[31]=0xCAFEBABEu;
+        put(bus,0,i_type(0x01,1,0x10,3)); // BLTZAL r1, not taken
+        put(bus,4,i_type(0x09,0,2,53));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[31]==0xCAFEBABEu);
+        assert(cpu.state().pc==4u && cpu.state().next_pc==8u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==53u);
+    }
+    // BGEZAL taken and not-taken cases preserve the same link/delay-slot rules.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0u;
+        put(bus,0,i_type(0x01,1,0x11,2)); // BGEZAL r1, +2
+        put(bus,4,i_type(0x09,0,2,54));
+        put(bus,12,i_type(0x09,0,3,55));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[31]==8u && cpu.state().next_pc==12u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==54u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==55u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x80000000u;
+        cpu.state().gpr[31]=0x12345678u;
+        put(bus,0,i_type(0x01,1,0x11,2)); // BGEZAL r1, not taken
+        put(bus,4,i_type(0x09,0,2,56));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[31]==0x12345678u && cpu.state().next_pc==8u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==56u);
+    }
+
     // Arithmetic right shifts are defined for all shift amounts, including 0 and 31.
     {
         TestBus bus; CpuCore cpu(bus); cpu.reset(0);
