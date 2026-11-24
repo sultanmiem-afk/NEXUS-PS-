@@ -7,8 +7,14 @@ std::uint32_t normalizeKseg1(std::uint32_t address) noexcept {
         ? (address & 0x1FFFFFFFu) : address;
 }
 bool ignoredWriteAddress(std::uint32_t address) noexcept {
+    if (address >= 0x1F801004u && address <= 0x1F801020u) return true;
     return address == 0x1F801000u || address == 0x1F801060u ||
-           address == 0xFFFE0130u || address == 0x1F802041u;
+           address == 0xFFFE0130u || address == 0x1F802041u ||
+           address == 0x1F802000u ||
+           address == 0x1F801040u || address == 0x1F801048u ||
+           address == 0x1F80104Au || address == 0x1F80104Eu ||
+           address == 0x1F80105Au ||
+           address == 0x1F801820u || address == 0x1F801824u;
 }
 bool ignoredReadAddress(std::uint32_t address) noexcept {
     return ignoredWriteAddress(address) || address == 0x1F801044u;
