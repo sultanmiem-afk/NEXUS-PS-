@@ -118,9 +118,15 @@ int main() {
     cueCdrom.advance(Cdrom::kCyclesPerSector);
     assert(cueCdrom.read8(0x1F801802u, byte) && byte == 0xA1u);
 
-    // The next sector is the second track, also addressed by absolute disc LBA.
+    // Finish sector 0, then verify sector 1 still belongs to track 1.
     for (std::size_t i = 1; i < 2048u; ++i)
         cueCdrom.read8(0x1F801802u, byte);
+    cueCdrom.advance(Cdrom::kCyclesPerSector);
+    assert(cueCdrom.read8(0x1F801802u, byte) && byte == 0x00u);
+    for (std::size_t i = 1; i < 2048u; ++i)
+        cueCdrom.read8(0x1F801802u, byte);
+
+    // Absolute disc LBA 2 maps to file sector 152, the second CUE track.
     cueCdrom.advance(Cdrom::kCyclesPerSector);
     assert(cueCdrom.read8(0x1F801802u, byte) && byte == 0xB2u);
 
