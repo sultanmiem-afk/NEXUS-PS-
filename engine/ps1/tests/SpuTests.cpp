@@ -71,9 +71,11 @@ int main() {
     assert(spu.writeRegister16(0x1C0u, 0x0100u)); // Reverb configuration
     assert(spu.readRegister16(0x1C0u, reg) && reg == 0x0100u);
 
-    // Reserved holes, misaligned offsets and addresses outside the SPU map fail.
-    assert(!spu.readRegister16(0x1A0u, reg));
-    assert(!spu.writeRegister16(0x1A0u, 0x1234u));
+    // Reverb work-area start is a valid global SPU register.
+    assert(spu.writeRegister16(0x1A0u, 0x3456u));
+    assert(spu.readRegister16(0x1A0u, reg) && reg == 0x3456u);
+
+    // Misaligned offsets and addresses outside the SPU map fail.
     assert(!spu.readRegister16(0x001u, reg));
     assert(!spu.writeRegister16(0x201u, 0x1234u));
     assert(!spu.readRegister16(0x200u, reg));
