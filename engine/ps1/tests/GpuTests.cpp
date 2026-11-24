@@ -258,5 +258,69 @@ int main() {
 
     gpu.writeGp1(0x00000000u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
+
+    // GPUSTAT readiness and DMA request bits follow the selected direction.
+    gpu.reset();
+    std::uint32_t status = gpu.readStatus();
+    assert((status & (1u << 26)) != 0); // ready for a command
+    assert((status & (1u << 27)) == 0); // no VRAM read data
+    assert((status & (1u << 28)) != 0); // ready for a DMA block
+    assert((status & (1u << 25)) == 0); // DMA disabled
+
+    gpu.writeGp1(0x04000001u); // FIFO mode
+    status = gpu.readStatus();
+    assert((status & (1u << 25)) != 0);
+    assert(((status >> 29) & 3u) == 1u);
+
+    gpu.writeGp1(0x04000002u); // CPU -> GP0
+    status = gpu.readStatus();
+    assert((status & (1u << 25)) != 0);
+    assert((status & (1u << 28)) != 0);
+    assert(((status >> 29) & 3u) == 2u);
+
+    // An incomplete polygon packet is not ready for another command/DMA block.
+    gpu.writeGp0(0x200000FFu);
+    status = gpu.readStatus();
+    assert((status & (1u << 26)) == 0);
+    assert((status & (1u << 28)) == 0);
+    assert((status & (1u << 25)) == 0);
+    gpu.writeGp0(10u | (10u << 16));
+    gpu.writeGp0(20u | (10u << 16));
+    gpu.writeGp0(10u | (20u << 16));
+    status = gpu.readStatus();
+    assert((status & (1u << 26)) != 0);
+    assert((status & (1u << 28)) != 0);
+    assert((status & (1u << 25)) != 0);
+
+    // CPU-to-VRAM transfer blocks command/DMA readiness until its data arrives.
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(40u | (40u << 16));
+    gpu.writeGp0(2u | (1u << 16));
+    status = gpu.readStatus();
+    assert((status & (1u << 26)) == 0);
+    assert((status & (1u << 28)) == 0);
+    assert((status & (1u << 25)) == 0);
+    gpu.writeGp0(0x22221111u);
+    status = gpu.readStatus();
+    assert((status & (1u << 26)) != 0);
+    assert((status & (1u << 28)) != 0);
+
+    // VRAM-to-CPU transfer asserts the read-ready and direction-3 request bits.
+    gpu.writeGp1(0x04000003u);
+    gpu.writeGp0(0xC0000000u);
+    gpu.writeGp0(40u | (40u << 16));
+    gpu.writeGp0(2u | (1u << 16));
+    status = gpu.readStatus();
+    assert((status & (1u << 27)) != 0);
+    assert((status & (1u << 25)) != 0);
+    assert((status & (1u << 26)) == 0);
+    assert((status & (1u << 28)) == 0);
+    assert(((status >> 29) & 3u) == 3u);
+    assert(gpu.readGp0() == 0x22221111u);
+    status = gpu.readStatus();
+    assert((status & (1u << 27)) == 0);
+    assert((status & (1u << 25)) == 0);
+    assert((status & (1u << 26)) != 0);
+    assert((status & (1u << 28)) != 0);
     return 0;
 }
