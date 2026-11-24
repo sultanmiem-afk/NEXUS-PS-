@@ -169,6 +169,10 @@ std::uint8_t Cdrom::fromBcd(std::uint8_t value) noexcept {
     return static_cast<std::uint8_t>(((value >> 4u) & 0x0Fu) * 10u + (value & 0x0Fu));
 }
 
+std::uint8_t Cdrom::toBcd(std::uint32_t value) noexcept {
+    return static_cast<std::uint8_t>(((value / 10u) << 4u) | (value % 10u));
+}
+
 bool Cdrom::readSector(std::uint32_t lba, std::vector<std::uint8_t>& output) const {
     if (!imageLoaded()) return false;
     const Track* selected = nullptr;
@@ -229,73 +233,106 @@ void Cdrom::advance(std::uint32_t cpuCycles) noexcept {
 }
 
 void Cdrom::executeCommand(std::uint8_t command) noexcept {
+    auto status = [this]() { return static_cast<std::uint8_t>(reading_ ? 0x20u : 0x00u); };
+    auto findTrack = [this](std::uint32_t lba) -> const Track* {
+        for (const Track& track : tracks_) {
+            const std::uint32_t count = track.fileEndSector - track.fileStartSector;
+            if (lba >= track.discStartLba && lba < track.discStartLba + count)
+                return &track;
+        }
+        return nullptr;
+    };
+    auto pushMsf = [this](std::uint32_t frames) {
+        pushResponse(toBcd(frames / (60u * 75u)));
+        pushResponse(toBcd((frames / 75u) % 60u));
+        pushResponse(toBcd(frames % 75u));
+    };
+
     switch (command) {
     case 0x01u: // Getstat
-        pushResponse(static_cast<std::uint8_t>(reading_ ? 0x20u : 0x00u));
-        raiseInterrupt(kIrqCommand);
-        break;
-    case 0x02u: { // Setloc (minute, second, frame; BCD)
-        if (parameters_.size() < 3u) {
-            raiseInterrupt(kIrqError);
-            break;
-        }
-        const std::uint32_t minute = fromBcd(parameters_[0]);
-        const std::uint32_t second = fromBcd(parameters_[1]);
-        const std::uint32_t frame = fromBcd(parameters_[2]);
+        pushResponse(status()); raiseInterrupt(kIrqCommand); break;
+    case 0x02u: { // Setloc
+        if (parameters_.size() < 3u) { raiseInterrupt(kIrqError); break; }
+        const std::uint32_t absolute =
+            (fromBcd(parameters_[0]) * 60u + fromBcd(parameters_[1])) * 75u +
+            fromBcd(parameters_[2]);
         parameters_.clear();
-        const std::uint32_t absolute = (minute * 60u + second) * 75u + frame;
         currentLba_ = absolute >= 150u ? absolute - 150u : 0u;
-        pushResponse(static_cast<std::uint8_t>(reading_ ? 0x20u : 0x00u));
-        raiseInterrupt(kIrqCommand);
-        break;
+        data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
+        pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     }
     case 0x06u: // ReadN
-    case 0x1Bu: // ReadS (same simplified data path)
-        if (!imageLoaded()) {
-            pushResponse(0x00u);
-            raiseInterrupt(kIrqError);
-            break;
-        }
-        reading_ = true;
-        data_.clear();
-        dataReady_ = false;
-        cycleRemainder_ = 0;
-        pushResponse(0x20u);
-        raiseInterrupt(kIrqCommand);
-        break;
+    case 0x1Bu: // ReadS: raw-sector details remain simplified to user data
+        if (!imageLoaded()) { pushResponse(0u); raiseInterrupt(kIrqError); break; }
+        reading_ = true; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
+        pushResponse(status()); raiseInterrupt(kIrqCommand); break;
+    case 0x07u: // Standby
     case 0x08u: // Stop
     case 0x09u: // Pause
-        reading_ = false;
-        cycleRemainder_ = 0;
-        pushResponse(0x00u);
-        raiseInterrupt(kIrqCommand);
-        break;
+        reading_ = false; cycleRemainder_ = 0;
+        pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     case 0x0Au: // Init
-        reading_ = false;
-        mode_ = 0;
-        request_ = 0;
-        data_.clear();
-        dataReady_ = false;
-        cycleRemainder_ = 0;
-        pushResponse(0x00u);
-        raiseInterrupt(kIrqCommand);
-        break;
+        reading_ = false; mode_ = 0; filterFile_ = 0; filterChannel_ = 0;
+        request_ = 0; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
+        parameters_.clear(); pushResponse(status()); raiseInterrupt(kIrqCommand); break;
+    case 0x0Du: // Setfilter
+        if (parameters_.size() < 2u) { raiseInterrupt(kIrqError); break; }
+        filterFile_ = parameters_[0]; filterChannel_ = parameters_[1];
+        parameters_.clear(); pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     case 0x0Eu: // Setmode
         if (!parameters_.empty()) mode_ = parameters_.front();
+        parameters_.clear(); cycleRemainder_ = 0;
+        pushResponse(status()); raiseInterrupt(kIrqCommand); break;
+    case 0x0Fu: // Getparam
+        pushResponse(status()); pushResponse(mode_);
+        pushResponse(filterFile_); pushResponse(filterChannel_);
+        raiseInterrupt(kIrqCommand); break;
+    case 0x10u: { // GetlocL: synthesized sector header
+        const Track* track = findTrack(currentLba_);
+        pushMsf(currentLba_ + 150u);
+        pushResponse(track != nullptr && track->dataOffset == 24u ? 0x02u : 0x01u);
+        pushResponse(0u); pushResponse(0u); pushResponse(0u); pushResponse(0u);
+        pushResponse(0u); raiseInterrupt(kIrqCommand); break;
+    }
+    case 0x11u: { // GetlocP: track/index and relative/absolute time
+        const Track* track = findTrack(currentLba_);
+        if (track == nullptr) {
+            for (unsigned i = 0; i < 8u; ++i) pushResponse(0u);
+        } else {
+            const std::size_t trackIndex = static_cast<std::size_t>(track - tracks_.data());
+            pushResponse(toBcd(static_cast<std::uint32_t>(trackIndex + 1u)));
+            pushResponse(0x01u);
+            pushMsf(currentLba_ - track->discStartLba);
+            pushMsf(currentLba_ + 150u);
+        }
+        raiseInterrupt(kIrqCommand); break;
+    }
+    case 0x13u: // GetTN
+        pushResponse(status());
+        pushResponse(tracks_.empty() ? 0u : 0x01u);
+        pushResponse(toBcd(static_cast<std::uint32_t>(tracks_.size())));
+        raiseInterrupt(kIrqCommand); break;
+    case 0x14u: { // GetTD: approximate selected track start MSF
+        if (parameters_.empty()) { raiseInterrupt(kIrqError); break; }
+        const std::uint32_t number = fromBcd(parameters_.front());
         parameters_.clear();
-        pushResponse(static_cast<std::uint8_t>(reading_ ? 0x20u : 0x00u));
-        raiseInterrupt(kIrqCommand);
-        break;
-    case 0x10u: // GetlocL (minimal header response)
-        pushResponse(0u); pushResponse(0u); pushResponse(0u);
-        pushResponse(0u); pushResponse(0u); pushResponse(0u);
-        pushResponse(0u); pushResponse(0u);
-        raiseInterrupt(kIrqCommand);
-        break;
+        if (number == 0u || number > tracks_.size()) {
+            pushResponse(0u); raiseInterrupt(kIrqError); break;
+        }
+        const std::uint32_t absolute = tracks_[number - 1u].discStartLba + 150u;
+        pushResponse(status());
+        pushResponse(toBcd(absolute / (60u * 75u)));
+        pushResponse(toBcd((absolute / 75u) % 60u));
+        raiseInterrupt(kIrqCommand); break;
+    }
+    case 0x15u: // SeekL: coarse immediate seek to last Setloc address
+        if (!imageLoaded() || findTrack(currentLba_) == nullptr) {
+            pushResponse(0u); raiseInterrupt(kIrqError); break;
+        }
+        reading_ = false; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
+        pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     default:
-        pushResponse(0x00u);
-        raiseInterrupt(kIrqError);
-        break;
+        pushResponse(0x00u); raiseInterrupt(kIrqError); break;
     }
 }
 
