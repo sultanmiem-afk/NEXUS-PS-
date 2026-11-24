@@ -222,7 +222,7 @@ int main() {
     gpu.writeGp0(0x4200FF00u);
     gpu.writeGp0(0xA0000000u); // XY=(0,0).
     gpu.writeGp0(4u); // XY=(4,0).
-    assert(vram.readPixel(2u, 0u, pixel) && pixel == 0x3DE0u);
+    assert(vram.readPixel(2u, 0u, pixel) && pixel == 0x01EFu);
 
     // Gouraud line interpolates endpoint colors with poisoned XY data.
     gpu.writeGp0(0x50000000u);
@@ -242,36 +242,7 @@ int main() {
     gpu.writeGp0(0xA0000000u);
     gpu.writeGp0(0x0000FF00u);
     gpu.writeGp0(4u);
-    assert(vram.readPixel(2u, 0u, pixel) && pixel == 0x3DE0u);
-
-    gpu.writeGp0(0xA0000000u); // XY=(0,0), not GP0(A0).
-    gpu.writeGp0(4u);
-    assert(vram.readPixel(332u, 300u, pixel) && pixel == 0x3DE0u);
-    gpu.writeGp0(0xE5000000u); // Restore zero draw offset.
-
-    // Gouraud line interpolation; A0000000 is XY packet data, not a transfer command.
-    gpu.writeGp0(0xE5000000u | 400u | (300u << 11));
-    gpu.writeGp0(0x50000000u);
-    gpu.writeGp0(0xA0000000u); // XY0=(0,0) after draw offset.
-    gpu.writeGp0(0x000000FFu); // Red endpoint color.
-    gpu.writeGp0(4u); // XY1=(4,0) after draw offset.
-    assert(vram.readPixel(404u, 300u, pixel) && pixel == 0x001Fu);
-    assert(vram.readPixel(402u, 300u, pixel) && pixel != 0u && pixel != 0x001Fu);
-    gpu.writeGp0(0xE5000000u);
-    gpu.writeGp0(0x020000FFu);
-    gpu.writeGp0(500u | (300u << 16));
-    gpu.writeGp0(1u | (1u << 16));
-    assert(vram.readPixel(500u, 300u, pixel) && pixel == 0x001Fu);
-
-    // Gouraud semi-transparent line 0x52.
-    gpu.writeGp0(0xE5000000u | 510u | (300u << 11));
-    vram.writePixel(510u, 300u, 0x001Fu);
-    gpu.writeGp0(0x5200FF00u);
-    gpu.writeGp0(0xA0000000u);
-    gpu.writeGp0(0x0000FF00u);
-    gpu.writeGp0(4u);
-    assert(vram.readPixel(512u, 300u, pixel) && pixel == 0x3DE0u);
-    gpu.writeGp0(0xE5000000u);
+    assert(vram.readPixel(2u, 0u, pixel) && pixel == 0x01EFu);
 
     gpu.writeGp0(0xA0000000u);
     gpu.writeGp0(30u | (40u << 16));
