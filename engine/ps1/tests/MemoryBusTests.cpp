@@ -55,7 +55,29 @@ int main() {
     assert(bus.read32(0x1FC00000u, word) && word == 0x5A5A5A5Au);
     assert(!bus.write32(0x1FC00000u, 0xFFFFFFFFu));
     assert(bus.read32(0xBFC00000u, word) && word == 0x5A5A5A5Au);
-    assert(!bus.read32(0x1F801000u, word));
+    // Early BIOS scratch/expansion registers are intentionally benign.
+    const std::uint32_t ignoredAddresses[] = {
+        0x1F801000u, 0x1F801060u, 0xFFFE0130u, 0x1F802041u
+    };
+    for (const auto address : ignoredAddresses) {
+        assert(bus.write32(address, 0xDEADBEEFu));
+        word = 0xFFFFFFFFu;
+        assert(bus.read32(address, word) && word == 0u);
+    }
+    word = 0xFFFFFFFFu;
+    assert(bus.read32(0x1F801044u, word) && word == 0u);
+
+    // KSEG1 aliases of interrupt, DMA, timer and CD-ROM MMIO use physical decode.
+    assert(bus.write32(0xBF801074u, 0x20u));
+    assert(bus.read32(0x1F801074u, word) && word == 0x20u);
+    assert(bus.write32(0xBF8010F0u, 0x12345678u));
+    assert(bus.read32(0x1F8010F0u, word) && word == 0x12345678u);
+    assert(bus.write16(0xBF801100u, 0x3456u));
+    std::uint16_t aliasHalf = 0u;
+    assert(bus.read16(0x1F801100u, aliasHalf) && aliasHalf == 0x3456u);
+    std::uint8_t aliasByte = 0u;
+    assert(bus.write8(0xBF801800u, 0u));
+    assert(bus.read8(0x1F801800u, aliasByte) && aliasByte == 0x03u);
 
     // DMA registers are mapped through the CPU-visible memory bus.
     assert(bus.write32(0x1F801080u, 0x00123456u));
