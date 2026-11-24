@@ -245,7 +245,7 @@ int main() {
         assert(((cp0.read(Cop0::kCause) >> 2) & 0x1Fu) ==
                static_cast<std::uint32_t>(CpuException::Syscall));
         assert((cp0.read(Cop0::kCause) & Cop0::kCauseBranchDelay) == 0);
-        assert((cp0.read(Cop0::kStatus) & 0x3Fu) == 0x0000003Du);
+        assert((cp0.read(Cop0::kStatus) & 0x3Fu) == 0x00000014u);
     }
     // CP0 delay-slot exception records the branch PC and sets Cause.BD.
     {
@@ -280,8 +280,9 @@ int main() {
         cp0.write(Cop0::kBadVaddr, 0x12345678u);
         assert(cp0.read(Cop0::kBadVaddr) == 0u);
         cp0.write(Cop0::kStatus, 0x00000015u);
-        cp0.enter_exception(*([]() -> CpuState* { static CpuState s; s.reset(0); return &s; })(),
-                            CpuException::Syscall, 0x400u, false);
+        CpuState cpu;
+        cpu.reset(0);
+        cp0.enter_exception(cpu, CpuException::Syscall, 0x400u, false);
         cp0.return_from_exception();
         assert((cp0.read(Cop0::kStatus) & 0x3Fu) == 0x00000015u);
     }
