@@ -12,6 +12,7 @@ add_library(nexus_ps1_cpu
     Gpu.cpp
     MemoryBus.cpp
     DmaController.cpp
+    InterruptController.cpp
     Ps1System.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
