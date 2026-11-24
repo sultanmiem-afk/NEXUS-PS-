@@ -18,7 +18,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S engine/ps1 -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S engine/ps1 -B build -DCMAKE_BUILD_TYPE=Debug
       - name: Build
         run: cmake --build build --parallel 2
       - name: Test
