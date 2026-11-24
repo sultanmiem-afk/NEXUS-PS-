@@ -180,6 +180,48 @@ int main() {
     assert(spu.voiceState(0u, decodedVoice) && decodedVoice.currentAddress == 4u);
     assert(spu.nextVoiceSample(0u, nextSample) && nextSample == 3);
 
+
+    // Per-voice ADSR: Attack rises, Decay reaches sustain, Sustain holds/runs,
+    // and Key-off enters a gradual Release instead of cutting the envelope.
+    spu.reset();
+    assert(spu.writeRegister16(0x008u, 0x7FF0u)); // Fast attack + fast decay, low sustain level.
+    assert(spu.writeRegister16(0x00Au, 0x001Fu)); // Fast linear release.
+    assert(spu.writeRegister16(0x188u, 0x0001u)); // Key-on voice 0.
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(decodedVoice.adsrPhase == Spu::AdsrPhase::Attack);
+    assert(decodedVoice.currentAdsrVolume == 0u);
+    assert(spu.advanceAdsr(0u, 100u));
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(decodedVoice.adsrPhase == Spu::AdsrPhase::Attack);
+    assert(decodedVoice.currentAdsrVolume > 0u); // Attack is gradual.
+    const std::uint16_t attackLevel = decodedVoice.currentAdsrVolume;
+
+    // A second channel has an independent envelope and has not advanced.
+    assert(spu.writeRegister16(0x018u, 0x0010u)); // Voice 1 ADSR low, deliberately slow attack.
+    assert(spu.writeRegister16(0x01Au, 0x001Fu));
+    assert(spu.writeRegister16(0x188u, 0x0002u)); // Key-on voice 1.
+    assert(spu.advanceAdsr(0u, 2048u));
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(decodedVoice.adsrPhase == Spu::AdsrPhase::Sustain);
+    assert(spu.voiceState(1u, voice));
+    assert(voice.adsrPhase == Spu::AdsrPhase::Attack);
+    assert(voice.currentAdsrVolume == 0u);
+
+    const std::uint16_t beforeRelease = decodedVoice.currentAdsrVolume;
+    assert(spu.writeRegister16(0x18Cu, 0x0001u)); // Key-off voice 0.
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(!decodedVoice.keyedOn && decodedVoice.adsrPhase == Spu::AdsrPhase::Release);
+    assert(spu.advanceAdsr(0u, 1u));
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(decodedVoice.currentAdsrVolume < beforeRelease);
+    assert(decodedVoice.currentAdsrVolume > 0u); // Release is gradual, not immediate.
+    assert(spu.advanceAdsr(0u, 4096u) == false);
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(decodedVoice.adsrPhase == Spu::AdsrPhase::Off);
+    assert(decodedVoice.currentAdsrVolume == 0u);
+    assert(spu.voiceState(1u, voice));
+    assert(voice.adsrPhase == Spu::AdsrPhase::Attack); // Voice 1 was not affected.
+
     // Misaligned offsets and addresses outside the SPU map fail.
     assert(!spu.readRegister16(0x001u, reg));
     assert(!spu.writeRegister16(0x201u, 0x1234u));
