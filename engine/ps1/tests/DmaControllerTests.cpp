@@ -427,6 +427,17 @@ int main() {
     assert((partialDma.dicr() & (1u << 27)) == 0u);
     assert((partialDma.channelControl(3) & (1u << 24)) != 0u);
 
+    // Disabling DPCR stalls an active transfer without discarding its progress.
+    assert(partialDma.write32(DmaController::kDpcrAddress, 0u));
+    assert(!partialDma.executeCdromTransfer(ram, partialCdrom));
+    assert(partialDma.lastCdromTransferWords() == 0u);
+    assert(partialCdrom.dataAvailableBytes() == 0u);
+    assert(partialDma.base(3) == 0x3200u);
+    assert(partialDma.blockControl(3) == 0x00010180u);
+    assert((partialDma.channelControl(3) & (1u << 24u)) != 0u);
+
+    // Re-enabling the channel resumes the same block on the next sector.
+    assert(partialDma.write32(DmaController::kDpcrAddress, 1u << 15));
     // A later sector resumes the same block and only then signals completion.
     partialCdrom.advance(Cdrom::kCyclesPerSector);
     assert(partialCdrom.dataAvailableBytes() == 2048u);
