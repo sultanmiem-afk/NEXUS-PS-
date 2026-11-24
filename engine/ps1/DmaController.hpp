@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace nexus::ps1 {
+namespace nexus::ps1 {\n\nclass Ram;\nclass Gpu;
 
 // Register-level model of the seven PS1 DMA channels.
 // Transfer execution and bus arbitration are deliberately implemented later.
@@ -19,7 +19,7 @@ public:
     void reset() noexcept;
 
     bool read32(std::uint32_t address, std::uint32_t& value) const noexcept;
-    bool write32(std::uint32_t address, std::uint32_t value) noexcept;
+    bool write32(std::uint32_t address, std::uint32_t value) noexcept;\n\n    // Executes a pending channel-2 transfer synchronously. Bus timing,\n    // arbitration and IRQ delivery are handled by later system integration.\n    bool executeGpuTransfer(Ram& ram, Gpu& gpu);\n    std::uint32_t lastTransferWords() const noexcept { return lastTransferWords_; }
 
     std::uint32_t base(std::size_t channel) const noexcept;
     std::uint32_t blockControl(std::size_t channel) const noexcept;
@@ -36,9 +36,9 @@ private:
     std::array<Channel, kChannelCount> channels_{};
     std::uint32_t dpcr_ = 0;
     std::uint32_t dicrControl_ = 0;
-    std::uint32_t dicrFlags_ = 0;
+    std::uint32_t dicrFlags_ = 0;\n    std::uint32_t lastTransferWords_ = 0;
 
-    bool masterIrq() const noexcept;
+    bool masterIrq() const noexcept;\n    bool executeGpuLinearTransfer(Ram& ram, Gpu& gpu, std::uint32_t& address,\n                                  std::uint32_t words, bool toGpu, bool decrement);\n    bool executeGpuLinkedList(Ram& ram, Gpu& gpu, std::uint32_t& address,\n                              bool toGpu);
 };
 
 } // namespace nexus::ps1
