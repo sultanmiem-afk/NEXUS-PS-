@@ -28,6 +28,8 @@ public:
     void reset(std::uint32_t resetVector = 0xBFC00000u) noexcept;
     bool loadBios(const std::vector<std::uint8_t>& image) noexcept;
     bool loadDiscImage(const std::vector<std::uint8_t>& image) noexcept;
+    bool loadDiscCue(const std::string& cueText, const std::string& binFilename,
+                     const std::vector<std::uint8_t>& binImage) noexcept;
 
     SystemStepResult step();
 
