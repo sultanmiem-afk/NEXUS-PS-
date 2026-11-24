@@ -121,7 +121,14 @@ bool DmaController::executeCdromTransfer(Ram& ram, Cdrom& cdrom) {
     const bool enabled = (dpcr_ & (1u << (kCdromChannel * 4u + 3u))) != 0u;
     const bool deviceToRam = (control & 1u) == 0u;
     const std::uint32_t sync = (control >> 9u) & 3u;
-    if (!started || !enabled || !deviceToRam || sync != 1u) {
+    if (!started) {
+        cdromDmaActive_ = false;
+        return false;
+    }
+    // A disabled DPCR channel is stalled, not cancelled: preserve the in-flight
+    // block counters so the transfer can resume when the channel is re-enabled.
+    if (!enabled) return false;
+    if (!deviceToRam || sync != 1u) {
         cdromDmaActive_ = false;
         return false;
     }
