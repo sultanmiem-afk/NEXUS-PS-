@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 using namespace nexus::ps1;
@@ -9,6 +10,16 @@ using namespace nexus::ps1;
 namespace {
 void putWord(Ram& ram, std::uint32_t address, std::uint32_t value) {
     assert(ram.write32(address, value));
+}
+void putBiosWord(std::vector<std::uint8_t>& bios, std::size_t offset, std::uint32_t value) {
+    bios[offset] = static_cast<std::uint8_t>(value);
+    bios[offset + 1u] = static_cast<std::uint8_t>(value >> 8u);
+    bios[offset + 2u] = static_cast<std::uint8_t>(value >> 16u);
+    bios[offset + 3u] = static_cast<std::uint8_t>(value >> 24u);
+}
+std::uint32_t iType(std::uint32_t opcode, std::uint32_t rs,
+                    std::uint32_t rt, std::uint16_t immediate) {
+    return (opcode << 26u) | (rs << 21u) | (rt << 16u) | immediate;
 }
 }
 
@@ -162,6 +173,44 @@ int main() {
     assert(sawTimer1GpuIrq);
     assert((system.memory().interrupts().status() & (1u << 4)) != 0u);
     assert((system.memory().interrupts().status() & (1u << 5)) != 0u);
+
+    // Synthetic BIOS smoke test: MIPS code issues Setloc and ReadN against a CUE/BIN test disc.
+    system.reset();
+    std::vector<std::uint8_t> testDisc(151u * 2048u, 0u);
+    for (std::size_t i = 0; i < 2048u; ++i)
+        testDisc[150u * 2048u + i] = static_cast<std::uint8_t>(0x80u + (i & 0x7Fu));
+    const std::string testCue =
+        "FILE \"bios-test.bin\" BINARY\n"
+        " TRACK 01 MODE1/2048\n"
+        " INDEX 01 00:02:00\n";
+    assert(system.loadDiscCue(testCue, "bios-test.bin", testDisc));
+    std::vector<std::uint8_t> syntheticBios(BiosRom::kSize, 0u);
+    const std::uint32_t biosProgram[] = {
+        0x3C011F80u,                         // LUI r1, 1F80
+        0x34211800u,                         // ORI r1, r1, 1800 (CD-ROM ports)
+        iType(0x09u, 0u, 2u, 0x0000u),        // ADDIU r2, r0, 0
+        iType(0x28u, 1u, 2u, 0x0002u),        // SB r2, 2(r1): minute
+        iType(0x09u, 0u, 2u, 0x0002u),        // ADDIU r2, r0, 2
+        iType(0x28u, 1u, 2u, 0x0002u),        // SB r2, 2(r1): second
+        iType(0x09u, 0u, 2u, 0x0000u),        // ADDIU r2, r0, 0
+        iType(0x28u, 1u, 2u, 0x0002u),        // SB r2, 2(r1): frame
+        iType(0x09u, 0u, 2u, 0x0002u),        // ADDIU r2, r0, 2
+        iType(0x28u, 1u, 2u, 0x0001u),        // SB r2, 1(r1): Setloc
+        iType(0x09u, 0u, 2u, 0x0006u),        // ADDIU r2, r0, 6
+        iType(0x28u, 1u, 2u, 0x0001u)         // SB r2, 1(r1): ReadN
+    };
+    for (std::size_t i = 0; i < sizeof(biosProgram) / sizeof(biosProgram[0]); ++i)
+        putBiosWord(syntheticBios, i * 4u, biosProgram[i]);
+    assert(system.loadBios(syntheticBios));
+    system.reset(); // Reset vector now fetches the synthetic BIOS program.
+    for (std::size_t i = 0; i < sizeof(biosProgram) / sizeof(biosProgram[0]); ++i)
+        assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert(system.memory().cdrom().reading());
+    system.memory().cdrom().advance(Cdrom::kCyclesPerSector);
+    assert(system.memory().cdrom().dataAvailableBytes() == 2048u);
+    std::uint8_t bootSectorByte = 0u;
+    assert(system.memory().read8(0x1F801802u, bootSectorByte));
+    assert(bootSectorByte == 0x80u);
 
     // BIOS loading validates exact image size and remains loaded across reset.
     std::vector<std::uint8_t> bios(BiosRom::kSize, 0);
