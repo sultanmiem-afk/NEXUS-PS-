@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CpuState.hpp"
+#include "Cop0.hpp"
 
 #include <cstdint>
 
@@ -23,7 +24,8 @@ enum class CpuStepStatus : std::uint8_t {
     Executed,
     BusFault,
     AddressError,
-    ReservedInstruction
+    ReservedInstruction,
+    ExceptionTaken
 };
 
 struct CpuStepResult {
@@ -41,6 +43,8 @@ public:
 
     CpuState& state() noexcept { return state_; }
     const CpuState& state() const noexcept { return state_; }
+    Cop0& cop0() noexcept { return cop0_; }
+    const Cop0& cop0() const noexcept { return cop0_; }
 
     void reset(std::uint32_t reset_vector = 0xBFC00000u) noexcept;
     CpuStepResult step();
@@ -48,6 +52,7 @@ public:
 private:
     CpuBus& bus_;
     CpuState state_{};
+    Cop0 cop0_{};
     bool in_delay_slot_ = false;
 
     void write_reg(std::uint32_t index, std::uint32_t value) noexcept;
