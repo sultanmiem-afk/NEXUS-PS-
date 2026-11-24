@@ -275,15 +275,30 @@ CpuStepResult CpuCore::step() {
     case 0x0E: write_reg(ins.rt(), rs ^ uimm); break; // XORI
     case 0x0F: write_reg(ins.rt(), uimm << 16); break;
 
-    case 0x10: {
+    case 0x10: { // COP0
         switch (ins.rs()) {
-        case 0x00: write_reg(ins.rt(), cop0_.read(ins.rd())); break;
-        case 0x04: cop0_.write(ins.rd(), rt); break;
-        case 0x10:
-            if (ins.function() == 0x10) cop0_.return_from_exception();
-            else raise_exception(CpuException::ReservedInstruction);
+        case 0x00: // MFC0
+            if ((ins.raw & 0x7FFu) == 0u)
+                write_reg(ins.rt(), cop0_.read(ins.rd()));
+            else
+                raise_exception(CpuException::ReservedInstruction);
             break;
-        default: raise_exception(CpuException::ReservedInstruction); break;
+        case 0x04: // MTC0
+            if ((ins.raw & 0x7FFu) == 0u)
+                cop0_.write(ins.rd(), rt);
+            else
+                raise_exception(CpuException::ReservedInstruction);
+            break;
+        case 0x10: // RFE has a fixed encoding: 0x42000010
+            if (ins.rt() == 0u && ins.rd() == 0u &&
+                ins.shift_amount() == 0u && ins.function() == 0x10u)
+                cop0_.return_from_exception();
+            else
+                raise_exception(CpuException::ReservedInstruction);
+            break;
+        default:
+            raise_exception(CpuException::ReservedInstruction);
+            break;
         }
         break;
     }
