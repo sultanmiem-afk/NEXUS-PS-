@@ -154,7 +154,7 @@ int main() {
 
     // Raw-texture opcode bypasses vertex-color modulation.
     vram.writePixel(0, 0, 0x7C00u);
-    gpu.writeGp0(0x26FFFFFFu); // raw texture, opaque.
+    gpu.writeGp0(0x25FFFFFFu); // raw texture, opaque.
     gpu.writeGp0(630u | (100u << 16));
     gpu.writeGp0(0u);
     gpu.writeGp0(650u | (100u << 16));
@@ -608,5 +608,84 @@ int main() {
     gpu.writeGp0(1u | (1u << 16));
     assert(vram.readPixel(920u, 450u, pixel) && pixel == 0x001Fu);
 
+
+    // Polygon opcode flag coverage: semi-transparent flat triangle uses B-F.
+    gpu.writeGp0(0xE1000040u); // ABR=2: background minus foreground.
+    vram.writePixel(10u, 10u, 10u);
+    gpu.writeGp0(0x22000018u); // Semi-transparent flat triangle, source red=3.
+    gpu.writeGp0(0xA0000000u); // Poison word is vertex XY=(0,0), not GP0(A0).
+    gpu.writeGp0(20u);
+    gpu.writeGp0(0u | (20u << 16));
+    assert(vram.readPixel(5u, 5u, pixel) && pixel == 0u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(900u | (400u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(900u, 400u, pixel) && pixel == 0x001Fu);
+
+    // Semi-transparent Gouraud triangle and quad use the same B-F direction.
+    vram.writePixel(105u, 105u, 10u);
+    gpu.writeGp0(0x32000018u);
+    gpu.writeGp0(100u | (100u << 16));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(120u | (100u << 16));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(100u | (120u << 16));
+    assert(vram.readPixel(105u, 105u, pixel) && pixel == 7u);
+
+    // Flat and Gouraud textured triangle/quad packets decode their flag bits.
+    // 15-bit texture page at (0,0); CLUT is not used in this case.
+    vram.writePixel(0u, 0u, 0x7C00u);
+    gpu.writeGp0(0x25FFFFFFu); // Flat raw-textured triangle.
+    gpu.writeGp0(600u | (300u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(620u | (300u << 16));
+    gpu.writeGp0(0x01000000u);
+    gpu.writeGp0(600u | (320u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(605u, 305u, pixel) && pixel == 0x7C00u);
+
+    // Gouraud textured triangle: each vertex contributes a color word.
+    gpu.writeGp0(0x34808080u);
+    gpu.writeGp0(650u | (300u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(670u | (300u << 16));
+    gpu.writeGp0(0x01000000u);
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(650u | (320u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(655u, 305u, pixel) && pixel == 0x7C00u);
+
+    // Gouraud textured quad has 12 words and must leave the next command aligned.
+    gpu.writeGp0(0x3C808080u);
+    gpu.writeGp0(700u | (300u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(720u | (300u << 16));
+    gpu.writeGp0(0x01000000u);
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(700u | (320u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(0x00808080u);
+    gpu.writeGp0(720u | (320u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(705u, 305u, pixel) && pixel == 0x7C00u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(880u | (400u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(880u, 400u, pixel) && pixel == 0x001Fu);
+
+    // Semi-transparent textured polygon blends only STP texels, with B-F.
+    vram.writePixel(0u, 0u, 0x8003u); // STP red index/direct texel.
+    vram.writePixel(740u, 300u, 10u);
+    gpu.writeGp0(0xE1000140u); // 15-bit texture page, ABR=2.
+    gpu.writeGp0(0x26FFFFFFu); // Semi-transparent modulated texture.
+    gpu.writeGp0(740u | (300u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(760u | (300u << 16));
+    gpu.writeGp0(0x01000000u);
+    gpu.writeGp0(740u | (320u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(745u, 305u, pixel));
     return 0;
 }
