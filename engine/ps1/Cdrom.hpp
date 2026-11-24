@@ -3,21 +3,26 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <string>
 #include <vector>
 
 namespace nexus::ps1 {
 
-// Early CD-ROM controller model. Supports user-supplied cooked 2048-byte
-// sectors and raw 2352-byte sectors; command timing is intentionally approximate.
 class Cdrom final {
 public:
     static constexpr std::uint32_t kBaseAddress = 0x1F801800u;
-    static constexpr std::uint32_t kCyclesPerSector = 451584u; // ~75 sectors/s
+    static constexpr std::uint32_t kCyclesPerSector = 451584u;
 
     void reset() noexcept;
     bool loadImage(const std::vector<std::uint8_t>& image) noexcept;
-    bool imageLoaded() const noexcept { return sectorSize_ != 0u && !image_.empty(); }
+    // Parses a single-BIN CUE sheet and binds its FILE entry to the supplied
+    // filename and bytes. Multi-file CUE sheets are rejected explicitly.
+    bool loadCue(const std::string& cueText, const std::string& binFilename,
+                 const std::vector<std::uint8_t>& binImage) noexcept;
+    bool imageLoaded() const noexcept { return !image_.empty() && !tracks_.empty(); }
     std::size_t sectorCount() const noexcept;
+    std::size_t trackCount() const noexcept { return tracks_.size(); }
+    bool cueLoaded() const noexcept { return cueLoaded_; }
     bool irqPending() const noexcept;
 
     void advance(std::uint32_t cpuCycles) noexcept;
@@ -30,8 +35,18 @@ public:
     bool reading() const noexcept { return reading_; }
 
 private:
+    struct Track {
+        std::uint32_t discStartLba = 0;
+        std::uint32_t fileStartSector = 0;
+        std::uint32_t fileEndSector = 0;
+        std::size_t sectorSize = 0;
+        std::size_t dataOffset = 0;
+        std::size_t userDataSize = 2048;
+    };
+
     std::vector<std::uint8_t> image_{};
-    std::size_t sectorSize_ = 0;
+    std::vector<Track> tracks_{};
+    bool cueLoaded_ = false;
     std::uint8_t index_ = 0;
     std::uint8_t interruptEnable_ = 0;
     std::uint8_t interruptFlags_ = 0;
