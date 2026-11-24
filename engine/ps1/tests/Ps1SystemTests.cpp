@@ -36,7 +36,7 @@ int main() {
     putWord(system.memory().ram(), 28, 0x3C020001u); // LUI r2, 1 (height in high half)
     putWord(system.memory().ram(), 32, 0x34420001u); // ORI r2, r2, 1 (width=1)
     putWord(system.memory().ram(), 36, 0xAC220000u); // dimensions
-    for (int i = 0; i < 10; ++i)
+    for (int i = 0; i < 20; ++i)
         assert(system.step().cpu.status == CpuStepStatus::Executed);
     std::uint16_t pixel = 0;
     assert(system.vram().readPixel(0, 0, pixel));
