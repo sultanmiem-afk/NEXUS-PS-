@@ -46,6 +46,19 @@ int main() {
     assert(pixel != 0x001Fu && pixel != 0x03E0u && pixel != 0x7C00u);
     assert((pixel & 0x7FFFu) != 0);
 
+
+    // 15-bit textured triangle samples texels from a configured texture page.
+    vram.writePixel(64, 0, 0x7C00u);
+    gpu.writeGp0(0xE1000200u); // 15-bit texture page mode.
+    gpu.writeGp0(0x24000000u);
+    gpu.writeGp0(400u | (100u << 16));
+    gpu.writeGp0(0u);
+    gpu.writeGp0(420u | (100u << 16));
+    gpu.writeGp0(0x02000000u); // UV and page (page X=64, 15-bit).
+    gpu.writeGp0(400u | (120u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(405, 105, pixel) && pixel == 0x7C00u);
+
     gpu.writeGp0(0x400000FFu);
     gpu.writeGp0(300u | (300u << 16));
     gpu.writeGp0(310u | (305u << 16));
