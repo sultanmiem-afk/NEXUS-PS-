@@ -12,6 +12,7 @@ add_library(nexus_ps1_cpu
     Gpu.cpp
     MemoryBus.cpp
     DmaController.cpp
+    Ps1System.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(nexus_ps1_cpu PUBLIC cxx_std_17)
@@ -42,4 +43,8 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_gpu_tests tests/GpuTests.cpp)
     target_link_libraries(nexus_ps1_gpu_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_gpu_tests COMMAND nexus_ps1_gpu_tests)
+
+    add_executable(nexus_ps1_system_tests tests/Ps1SystemTests.cpp)
+    target_link_libraries(nexus_ps1_system_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_system_tests COMMAND nexus_ps1_system_tests)
 endif()
