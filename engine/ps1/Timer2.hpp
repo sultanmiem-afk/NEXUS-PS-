@@ -27,6 +27,7 @@ private:
     static constexpr std::uint32_t kIrqAtTarget = 1u << 4;
     static constexpr std::uint32_t kIrqAtOverflow = 1u << 5;
     static constexpr std::uint32_t kIrqRepeat = 1u << 6;
+    static constexpr std::uint32_t kIrqToggle = 1u << 7;
     static constexpr std::uint32_t kClockSourceMask = 3u << 8;
 
     bool advanceTicks(std::uint32_t ticks) noexcept;
