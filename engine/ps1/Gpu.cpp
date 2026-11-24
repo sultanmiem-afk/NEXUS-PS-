@@ -87,9 +87,9 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         }
         if (opcode == 0x02) expectedWords_ = 3;
         else if (opcode == 0x20) expectedWords_ = 4;
-        else if (opcode == 0x24 || opcode == 0x25) expectedWords_ = 7;
+        else if (opcode >= 0x24 && opcode <= 0x27) expectedWords_ = 7;
         else if (opcode == 0x28) expectedWords_ = 5;
-        else if (opcode == 0x2C || opcode == 0x2D) expectedWords_ = 9;
+        else if (opcode >= 0x2C && opcode <= 0x2F) expectedWords_ = 9;
         else if (opcode == 0x30) expectedWords_ = 6;
         else if (opcode == 0x38) expectedWords_ = 8;
         else if (opcode == 0x40) expectedWords_ = 3;
@@ -114,7 +114,7 @@ void Gpu::executePacket() {
         executeFillRectangle();
     } else if (opcode == 0x20 || opcode == 0x28) {
         executeFlatPolygon();
-    } else if (opcode == 0x24 || opcode == 0x25 || opcode == 0x2C || opcode == 0x2D) {
+    } else if (opcode >= 0x24 && opcode <= 0x27 || opcode >= 0x2C && opcode <= 0x2F) {
         executeTexturedPolygon();
     } else if (opcode == 0x30 || opcode == 0x38) {
         executeGouraudPolygon();
@@ -218,8 +218,9 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
 
 void Gpu::executeTexturedPolygon() noexcept {
     const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
-    const bool quad = opcode == 0x2C || opcode == 0x2D;
-    const bool rawTexture = opcode == 0x25 || opcode == 0x2D;
+    const bool quad = opcode >= 0x2C && opcode <= 0x2F;
+    const bool rawTexture = (opcode & 0x02u) != 0;
+    const bool semiTransparent = (opcode & 0x01u) != 0;
     const int count = quad ? 4 : 3;
     int x[4]{}, y[4]{}, u[4]{}, v[4]{};
     std::uint16_t page = 0;
@@ -236,19 +237,19 @@ void Gpu::executeTexturedPolygon() noexcept {
         v[i] = static_cast<int>((uv >> 8) & 0xFFu);
         if (i == 1) page = static_cast<std::uint16_t>(uv >> 16);
     }
-    drawTexturedTriangle(x, y, u, v, page);
+    drawTexturedTriangle(x, y, u, v, page, rawTexture, semiTransparent);
     if (quad) {
         const int x2[3] = {x[1], x[2], x[3]};
         const int y2[3] = {y[1], y[2], y[3]};
         const int u2[3] = {u[1], u[2], u[3]};
         const int v2[3] = {v[1], v[2], v[3]};
-        drawTexturedTriangle(x2, y2, u2, v2, page);
+        drawTexturedTriangle(x2, y2, u2, v2, page, rawTexture, semiTransparent);
     }
 }
 
 void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                                const int u[3], const int v[3],
-                               std::uint16_t page) noexcept {
+                               std::uint16_t page, bool rawTexture, bool semiTransparent) noexcept {
     const unsigned depth = (page >> 7) & 3u;
     if (depth == 3u) {
         ++unsupportedCommandCount_;
@@ -310,6 +311,7 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
         }
         // PS1 texture index/color zero is transparent.
         if (texel != 0) {
+            const bool texelStp = (texel & 0x8000u) != 0;
             if (!rawTexture) {
                 const std::uint32_t modulation = packet_[0];
                 const std::uint32_t tr = texel & 31u;
@@ -323,7 +325,27 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                 const std::uint32_t b = std::min(31u, (tb * cb) / 128u);
                 texel = static_cast<std::uint16_t>(r | (g << 5) | (b << 10));
             }
-            vram_.writePixel(static_cast<std::uint32_t>(px), static_cast<std::uint32_t>(py), texel);
+            const std::uint32_t dx = static_cast<std::uint32_t>(px);
+            const std::uint32_t dy = static_cast<std::uint32_t>(py);
+            std::uint16_t destination = 0;
+            if (!vram_.readPixel(dx, dy, destination)) continue;
+            if ((maskSetting_ & 0x02u) != 0 && (destination & 0x8000u) != 0) continue;
+            if (semiTransparent && texelStp) {
+                const std::uint32_t mode = (drawMode_ >> 5) & 3u;
+                const std::uint32_t sr = texel & 31u, sg = (texel >> 5) & 31u, sb = (texel >> 10) & 31u;
+                const std::uint32_t dr = destination & 31u, dg = (destination >> 5) & 31u, db = (destination >> 10) & 31u;
+                auto blend = [mode](std::uint32_t source, std::uint32_t dest) noexcept {
+                    switch (mode) {
+                    case 0: return (source + dest) >> 1;
+                    case 1: return std::min(31u, source + dest);
+                    case 2: return source > dest ? source - dest : 0u;
+                    default: return std::min(31u, dest + (source >> 2));
+                    }
+                };
+                texel = static_cast<std::uint16_t>(blend(sr,dr) | (blend(sg,dg)<<5) | (blend(sb,db)<<10));
+            }
+            if ((maskSetting_ & 0x01u) != 0 || texelStp) texel |= 0x8000u;
+            vram_.writePixel(dx, dy, texel);
         }
     }
 }
