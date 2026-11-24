@@ -106,7 +106,7 @@ int main() {
     // 15-bit textured triangle samples texels from a configured texture page.
     vram.writePixel(0, 0, 0x7C00u);
     gpu.writeGp0(0xE1000200u); // 15-bit texture page mode.
-    gpu.writeGp0(0x26000000u); // raw texture: isolate page sampling.
+    gpu.writeGp0(0x25000000u); // raw texture: isolate page sampling.
     gpu.writeGp0(400u | (100u << 16));
     gpu.writeGp0(0u);
     gpu.writeGp0(420u | (100u << 16));
