@@ -854,7 +854,8 @@ std::uint32_t Gpu::readStatus() const noexcept {
         status |= 1u << 25;
     }
 
-    if (fifoHasSpace) status |= 1u << 26;
+    if (fifoHasSpace && transferMode_ == TransferMode::None)
+        status |= 1u << 26;
     if (readyToSendVram) status |= 1u << 27;
     if (readyForDmaBlock) status |= 1u << 28;
     status |= (dmaDirection_ & 3u) << 29;
