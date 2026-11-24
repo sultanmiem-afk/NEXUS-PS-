@@ -93,6 +93,10 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         else if (opcode == 0x30) expectedWords_ = 6;
         else if (opcode == 0x38) expectedWords_ = 8;
         else if (opcode == 0x40) expectedWords_ = 3;
+        else if (opcode >= 0x60 && opcode <= 0x63) expectedWords_ = 3;
+        else if ((opcode >= 0x68 && opcode <= 0x6B) ||
+                 (opcode >= 0x70 && opcode <= 0x73) ||
+                 (opcode >= 0x78 && opcode <= 0x7B)) expectedWords_ = 2;
         else if (opcode == 0xA0 || opcode == 0xC0) expectedWords_ = 3;
         else {
             ++unsupportedCommandCount_;
@@ -120,6 +124,11 @@ void Gpu::executePacket() {
         executeGouraudPolygon();
     } else if (opcode == 0x40) {
         executeFlatLine();
+    } else if ((opcode >= 0x60 && opcode <= 0x63) ||
+               (opcode >= 0x68 && opcode <= 0x6B) ||
+               (opcode >= 0x70 && opcode <= 0x73) ||
+               (opcode >= 0x78 && opcode <= 0x7B)) {
+        executeRectangle();
     } else if (opcode == 0xA0) {
         beginImageTransfer(TransferMode::CpuToVram);
     } else if (opcode == 0xC0) {
@@ -416,6 +425,67 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
             vram_.writePixel(static_cast<std::uint32_t>(px),
                              static_cast<std::uint32_t>(py),
                              static_cast<std::uint16_t>(color24To15(rgb)));
+        }
+    }
+}
+
+void Gpu::executeRectangle() noexcept {
+    const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
+    const bool variableSize = opcode >= 0x60 && opcode <= 0x63;
+    const std::uint32_t width = variableSize
+        ? (packet_[2] & 0xFFFFu)
+        : (opcode >= 0x78 ? 16u : (opcode >= 0x70 ? 8u : 1u));
+    const std::uint32_t height = variableSize
+        ? ((packet_[2] >> 16) & 0xFFFFu) : width;
+    if (width == 0 || height == 0) return;
+
+    const std::uint16_t source = static_cast<std::uint16_t>(color24To15(packet_[0]));
+    const int x = signExtend11(packet_[1]) +
+                  signExtend11(drawOffset_ & 0x7FFu);
+    const int y = signExtend11(packet_[1] >> 16) +
+                  signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
+    const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
+    const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
+    const int bottom = static_cast<int>((drawAreaBottomRight_ >> 10) & 0x1FFu);
+    const int x0 = std::max({0, left, x});
+    const int y0 = std::max({0, top, y});
+    const int x1 = std::min({static_cast<int>(Vram::kWidth), right + 1,
+                             x + static_cast<int>(width)});
+    const int y1 = std::min({static_cast<int>(Vram::kHeight), bottom + 1,
+                             y + static_cast<int>(height)});
+    if (x0 >= x1 || y0 >= y1) return;
+
+    const bool semiTransparent = (opcode & 0x01u) != 0;
+    const std::uint32_t blendMode = (drawMode_ >> 5) & 3u;
+    const std::uint32_t sr = source & 31u;
+    const std::uint32_t sg = (source >> 5) & 31u;
+    const std::uint32_t sb = (source >> 10) & 31u;
+    for (int py = y0; py < y1; ++py) {
+        for (int px = x0; px < x1; ++px) {
+            std::uint16_t destination = 0;
+            if (!vram_.readPixel(static_cast<std::uint32_t>(px),
+                                 static_cast<std::uint32_t>(py), destination)) continue;
+            if ((maskSetting_ & 0x02u) != 0 && (destination & 0x8000u) != 0) continue;
+            std::uint16_t output = source;
+            if (semiTransparent) {
+                const std::uint32_t dr = destination & 31u;
+                const std::uint32_t dg = (destination >> 5) & 31u;
+                const std::uint32_t db = (destination >> 10) & 31u;
+                auto blend = [blendMode](std::uint32_t s, std::uint32_t d) noexcept {
+                    switch (blendMode) {
+                    case 0: return (s + d) >> 1;
+                    case 1: return std::min(31u, s + d);
+                    case 2: return s > d ? s - d : 0u;
+                    default: return std::min(31u, d + (s >> 2));
+                    }
+                };
+                output = static_cast<std::uint16_t>(
+                    blend(sr, dr) | (blend(sg, dg) << 5) | (blend(sb, db) << 10));
+            }
+            if ((maskSetting_ & 0x01u) != 0) output |= 0x8000u;
+            vram_.writePixel(static_cast<std::uint32_t>(px),
+                             static_cast<std::uint32_t>(py), output);
         }
     }
 }
