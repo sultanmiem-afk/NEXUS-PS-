@@ -508,5 +508,17 @@ int main() {
     gpu.writeGp0(1u | (1u << 16u));
     assert(vram.readPixel(960u, 450u, pixel) && pixel == 0x001Fu);
 
+    gpu.reset();
+    gpu.writeGp0(0x5A0000FFu); // Gouraud polyline mirror opcode.
+    gpu.writeGp0(10u | (10u << 16u));
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(20u | (20u << 16u));
+    gpu.writeGp0(0x00FF0000u);
+    gpu.writeGp0(0x55555555u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(970u | (450u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(970u, 450u, pixel) && pixel == 0x001Fu);
+
     return 0;
 }
