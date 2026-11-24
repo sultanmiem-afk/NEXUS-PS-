@@ -15,6 +15,7 @@ struct SystemStepResult {
     bool dmaTransferred = false;
     std::uint32_t dmaWords = 0;
     bool timer0Irq = false;
+    bool timer1Irq = false;
 };
 
 // First machine-level integration: CPU-visible memory, GPU ports, VRAM and
