@@ -117,7 +117,7 @@ private:
     std::uint32_t maskSetting_ = 0;
     std::size_t unsupportedCommandCount_ = 0;
 
-    static std::uint32_t color24To15(std::uint32_t rgb) noexcept;
+    static std::uint32_t color24To15(std::uint32_t rgb, bool semiTransparent = false) noexcept;
     static std::uint32_t decodeTransferDimension(std::uint16_t value,
                                                   std::uint32_t maximum) noexcept;
     void processGp0Word(std::uint32_t value);
@@ -133,7 +133,8 @@ private:
     void executeTexturedPolygon() noexcept;
     void drawTexturedTriangle(const int x[3], const int y[3],
                               const int u[3], const int v[3],
-                              std::uint16_t page, bool rawTexture, bool semiTransparent) noexcept;
+                              std::uint16_t page, bool rawTexture, bool semiTransparent,
+                              const std::uint32_t colors[3] = nullptr) noexcept;
     void executeRectangle() noexcept;
     void executeTexturedRectangle() noexcept;
     void executeFlatLine() noexcept;
@@ -145,7 +146,7 @@ private:
                       std::uint32_t rgb) noexcept;
     void drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
                              int x1, int y1, std::uint32_t c1,
-                             int x2, int y2, std::uint32_t c2) noexcept;
+                             int x2, int y2, std::uint32_t c2, bool semiTransparent = false) noexcept;
     void executeEnvironmentCommand(std::uint32_t command) noexcept;
 };
 
