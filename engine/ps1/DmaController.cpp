@@ -5,6 +5,8 @@
 #include "Gpu.hpp"
 #include "Ram.hpp"
 
+#include <algorithm>
+
 namespace nexus::ps1 {
 
 void DmaController::reset() noexcept {
