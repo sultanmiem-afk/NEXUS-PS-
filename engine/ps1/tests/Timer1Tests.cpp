@@ -32,5 +32,24 @@ int main() {
     assert(timer.counter() == 0u);
 
     assert(!timer.read32(0x1F80111Cu, value));
+
+    // Toggle IRQ output: only the active (high-to-low) transition interrupts.
+    assert(timer.write32(Timer1::kTargetAddress, 1u));
+    assert(timer.write32(Timer1::kModeAddress, (1u << 4) | (1u << 6) | (1u << 7)));
+    assert(timer.advance(1u));
+    assert((timer.mode() & (1u << 10)) == 0u);
+    assert(!timer.advance(1u));
+    assert((timer.mode() & (1u << 10)) != 0u);
+    assert(timer.advance(1u));
+    assert((timer.mode() & (1u << 10)) == 0u);
+
+    // Target zero is reached when the 16-bit counter wraps.
+    assert(timer.write32(Timer1::kTargetAddress, 0u));
+    assert(timer.write32(Timer1::kModeAddress, (1u << 4) | (1u << 3)));
+    assert(timer.write32(Timer1::kCounterAddress, 0xFFFFu));
+    assert(timer.advance(1u));
+    assert(timer.counter() == 0u);
+    assert((timer.mode() & (1u << 11)) != 0u);
+
     return 0;
 }
