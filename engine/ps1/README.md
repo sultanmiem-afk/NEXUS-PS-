@@ -63,3 +63,19 @@ Extended textured triangle/quad sampling to indexed 4-bit and 8-bit texture page
 ### Texture modulation and raw texture mode (experimental)
 
 Added textured triangle/quad opcode variants GP0(24h/25h) and GP0(2Ch/2Dh). Modulated variants multiply sampled 5-bit RGB texture channels by the packet vertex RGB color using a neutral 128 scale; raw variants bypass modulation. CLUT test fixtures were corrected to seed the actual page/CLUT coordinates used by their packets. Semi-transparency, dithering, exact fixed-point behavior, and hardware rasterization rules remain incomplete.
+
+
+### Initial CD-ROM controller (experimental)
+
+Added a first CD-ROM register/device model at 1F801800-1F801803. It can mount
+user-supplied cooked 2048-byte sector images and simple raw 2352-byte images,
+accept Setloc and ReadN/ReadS, return basic command responses, produce 2048-byte
+data sectors at an approximate 75 sectors/second, and raise simplified CD-ROM
+interrupt flags routed to the system interrupt controller. The sector clock is
+a coarse 451584-CPU-cycle interval, not cycle-accurate drive mechanics.
+
+This is not yet a complete CD-ROM implementation: DMA channel 3, XA audio,
+subchannel/Q data, full command/response timing, seek behavior, Mode 2 Form 2,
+error correction, and full disc filesystem handling are not implemented. Raw
+2352-byte extraction currently assumes user data begins at byte 24. A passing
+unit test validates this subset only; it does not demonstrate that a game boots.
