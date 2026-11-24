@@ -688,6 +688,8 @@ int main() {
 
     // Rectangles and sprites: variable-size, fixed-size and textured paths.
     gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
     gpu.writeGp0(0x600000FFu);
     gpu.writeGp0(100u | (100u << 16u));
     gpu.writeGp0(3u | (2u << 16u));
@@ -742,6 +744,8 @@ int main() {
 
     // GP1 reset/flush/info/status fields.
     gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
     gpu.writeGp1(0x03000001u);
     assert((gpu.readStatus() & (1u<<23)) != 0u);
     gpu.writeGp1(0x03000000u);
