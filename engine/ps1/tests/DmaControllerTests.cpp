@@ -55,7 +55,11 @@ int main() {
     assert(dma.write32(DmaController::kBaseAddress + 0x20u, 0x100u));
     assert(dma.write32(DmaController::kBaseAddress + 0x24u, 1u));
     assert(dma.write32(DmaController::kBaseAddress + 0x28u, 0x11000001u));
+    assert(dma.write32(DmaController::kDicrAddress, (1u << 23) | (1u << 18)));
     assert(dma.executeGpuTransfer(ram, gpu));
+    assert((dma.dicr() & (1u << 26)) != 0u); // Channel 2 completion flag.
+    assert((dma.dicr() & 0x80000000u) != 0u); // Master IRQ asserted.
+    assert(dma.irqPending());
     std::uint16_t pixel = 0;
     assert(vram.readPixel(0, 0, pixel) && pixel == 0x1111u);
     assert(vram.readPixel(1, 0, pixel) && pixel == 0x2222u);
