@@ -35,6 +35,9 @@ public:
                      const std::vector<std::uint8_t>& binImage) noexcept;
 
     SystemStepResult step();
+    bool popAudioSample(Spu::StereoSample& sample) noexcept { return memory_.spu().popOutputSample(sample); }
+    std::size_t queuedAudioSamples() const noexcept { return memory_.spu().queuedOutputSamples(); }
+    static constexpr std::uint32_t kAudioSampleRate = 44100u;
 
     CpuCore& cpu() noexcept { return cpu_; }
     const CpuCore& cpu() const noexcept { return cpu_; }
@@ -67,6 +70,7 @@ private:
     Gpu gpu_;
     SystemBus bus_;
     CpuCore cpu_;
+    std::uint64_t audioSamplePhase_ = 0;
 };
 
 } // namespace nexus::ps1
