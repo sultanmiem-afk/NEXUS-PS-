@@ -221,8 +221,7 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
             opcode == 0x2A || opcode == 0x32 || opcode == 0x3A ||
             opcode == 0x34 || opcode == 0x35 || opcode == 0x36 ||
             opcode == 0x37 || opcode == 0x3C || opcode == 0x3D ||
-            opcode == 0x3E || opcode == 0x3F || opcode == 0x42 ||
-            opcode == 0x52 || opcode == 0x80) {
+            opcode == 0x3E || opcode == 0x3F || opcode == 0x80) {
             ++unsupportedCommandCount_;
         }
     }
@@ -259,8 +258,10 @@ void Gpu::executePacket() {
         executeTexturedPolygon();
     } else if (opcode == 0x30 || opcode == 0x38) {
         executeGouraudPolygon();
-    } else if (opcode == 0x40) {
+    } else if (opcode >= 0x40 && opcode <= 0x47) {
         executeFlatLine();
+    } else if (opcode >= 0x50 && opcode <= 0x57) {
+        executeGouraudLine();
     } else if ((opcode >= 0x64 && opcode <= 0x67) ||
                (opcode >= 0x6C && opcode <= 0x6F) ||
                (opcode >= 0x74 && opcode <= 0x77) ||
@@ -755,17 +756,44 @@ void Gpu::executeTexturedRectangle() noexcept {
 }
 
 void Gpu::executeFlatLine() noexcept {
+    const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
     const std::uint16_t color = static_cast<std::uint16_t>(color24To15(packet_[0]));
     const int offsetX = signExtend11(drawOffset_ & 0x7FFu);
     const int offsetY = signExtend11((drawOffset_ >> 11) & 0x7FFu);
     drawLine(signExtend11(packet_[1]) + offsetX,
              signExtend11(packet_[1] >> 16) + offsetY,
              signExtend11(packet_[2]) + offsetX,
-             signExtend11(packet_[2] >> 16) + offsetY, color);
+             signExtend11(packet_[2] >> 16) + offsetY,
+             color, (opcode & 1u) != 0u);
+}
+
+void Gpu::writeDrawPixel(int x, int y, std::uint16_t source,
+                         bool semiTransparent) noexcept {
+    std::uint16_t destination = 0;
+    if (!vram_.readPixel(static_cast<std::uint32_t>(x),
+                         static_cast<std::uint32_t>(y), destination)) return;
+    if ((maskSetting_ & 0x02u) != 0u && (destination & 0x8000u) != 0u) return;
+    std::uint16_t output = source;
+    if (semiTransparent) {
+        const std::uint32_t mode = (drawMode_ >> 5) & 3u;
+        const std::uint32_t sr = source & 31u, sg = (source >> 5) & 31u, sb = (source >> 10) & 31u;
+        const std::uint32_t dr = destination & 31u, dg = (destination >> 5) & 31u, db = (destination >> 10) & 31u;
+        const auto blend = [mode](std::uint32_t s, std::uint32_t d) noexcept {
+            switch (mode) {
+                case 0: return (s + d) >> 1;
+                case 1: return std::min(31u, s + d);
+                case 2: return s > d ? s - d : 0u;
+                default: return std::min(31u, d + (s >> 2));
+            }
+        };
+        output = static_cast<std::uint16_t>(blend(sr, dr) | (blend(sg, dg) << 5) | (blend(sb, db) << 10));
+    }
+    if ((maskSetting_ & 1u) != 0u) output |= 0x8000u;
+    vram_.writePixel(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), output);
 }
 
 void Gpu::drawLine(int x0, int y0, int x1, int y1,
-                   std::uint16_t color) noexcept {
+                   std::uint16_t color, bool semiTransparent) noexcept {
     const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
     const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
     const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
@@ -779,13 +807,55 @@ void Gpu::drawLine(int x0, int y0, int x1, int y1,
         if (x0 >= left && x0 <= right && y0 >= top && y0 <= bottom &&
             x0 >= 0 && x0 < static_cast<int>(Vram::kWidth) &&
             y0 >= 0 && y0 < static_cast<int>(Vram::kHeight)) {
-            vram_.writePixel(static_cast<std::uint32_t>(x0),
-                             static_cast<std::uint32_t>(y0), color);
+            writeDrawPixel(x0, y0, color, semiTransparent);
         }
         if (x0 == x1 && y0 == y1) break;
         const int twiceError = 2 * error;
         if (twiceError >= dy) { error += dy; x0 += sx; }
         if (twiceError <= dx) { error += dx; y0 += sy; }
+    }
+}
+
+void Gpu::executeGouraudLine() noexcept {
+    const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
+    const bool semiTransparent = (opcode & 1u) != 0u;
+    const int ox = signExtend11(drawOffset_ & 0x7FFu);
+    const int oy = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    int x = signExtend11(packet_[1]) + ox;
+    int y = signExtend11(packet_[1] >> 16) + oy;
+    const int endX = signExtend11(packet_[3]) + ox;
+    const int endY = signExtend11(packet_[3] >> 16) + oy;
+    const std::uint32_t c0 = packet_[0] & 0x00FFFFFFu;
+    const std::uint32_t c1 = packet_[2] & 0x00FFFFFFu;
+    const int dx = std::abs(endX - x), sx = x < endX ? 1 : -1;
+    const int dy = -std::abs(endY - y), sy = y < endY ? 1 : -1;
+    const int total = std::max(dx, -dy);
+    const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
+    const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
+    const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
+    const int bottom = static_cast<int>((drawAreaBottomRight_ >> 10) & 0x1FFu);
+    int error = dx + dy, step = 0;
+    for (;;) {
+        if (x >= left && x <= right && y >= top && y <= bottom &&
+            x >= 0 && x < static_cast<int>(Vram::kWidth) &&
+            y >= 0 && y < static_cast<int>(Vram::kHeight)) {
+            std::uint32_t rgb = 0;
+            for (int channel = 0; channel < 3; ++channel) {
+                const int a = static_cast<int>((c0 >> (channel * 8)) & 0xFFu);
+                const int b = static_cast<int>((c1 >> (channel * 8)) & 0xFFu);
+                const int value = total == 0 ? a : a + ((b - a) * step) / total;
+                rgb |= static_cast<std::uint32_t>(std::clamp(value, 0, 255)) << (channel * 8);
+            }
+            const std::uint16_t color = (drawMode_ & (1u << 9)) != 0u
+                ? ditheredColor24To15(rgb, x, y)
+                : static_cast<std::uint16_t>(color24To15(rgb));
+            writeDrawPixel(x, y, color, semiTransparent);
+        }
+        if (x == endX && y == endY) break;
+        const int twice = 2 * error;
+        if (twice >= dy) { error += dy; x += sx; }
+        if (twice <= dx) { error += dx; y += sy; }
+        ++step;
     }
 }
 
