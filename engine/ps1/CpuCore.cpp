@@ -81,7 +81,7 @@ CpuStepResult CpuCore::step() {
         case 0x07: write_reg(ins.rd(), static_cast<std::uint32_t>(
             static_cast<std::int32_t>(rt) >> (rs & 31u))); break; // SRAV
         case 0x08: branch(rs); in_delay_slot_ = true; break; // JR
-        case 0x09: write_reg(ins.rd() ? ins.rd() : 31u, state_.pc + 4u);
+        case 0x09: write_reg(ins.rd(), state_.pc + 4u);
                    branch(rs); in_delay_slot_ = true; break; // JALR
         case 0x10: write_reg(ins.rd(), state_.hi); break; // MFHI
         case 0x11: state_.hi = rs; break; // MTHI
