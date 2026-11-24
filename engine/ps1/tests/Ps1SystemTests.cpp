@@ -107,6 +107,24 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
     assert(system.cpu().state().pc == 0x80000080u);
 
+    // GPU-generated dot-clock and HBlank events feed Timer 0 and Timer 1.
+    system.reset(0x00000000u);
+    assert(system.memory().write32(Timer0::kTargetAddress, 1u));
+    assert(system.memory().write32(Timer0::kModeAddress, (1u << 8) | (1u << 4)));
+    assert(system.memory().write32(Timer1::kTargetAddress, 1u));
+    assert(system.memory().write32(Timer1::kModeAddress, (1u << 8) | (1u << 4)));
+    bool sawTimer0GpuIrq = false;
+    bool sawTimer1GpuIrq = false;
+    for (std::uint32_t i = 0; i < 2172u; ++i) {
+        const auto timedStep = system.step();
+        sawTimer0GpuIrq = sawTimer0GpuIrq || timedStep.timer0Irq;
+        sawTimer1GpuIrq = sawTimer1GpuIrq || timedStep.timer1Irq;
+    }
+    assert(sawTimer0GpuIrq);
+    assert(sawTimer1GpuIrq);
+    assert((system.memory().interrupts().status() & (1u << 4)) != 0u);
+    assert((system.memory().interrupts().status() & (1u << 5)) != 0u);
+
     // BIOS loading validates exact image size and remains loaded across reset.
     std::vector<std::uint8_t> bios(BiosRom::kSize, 0);
     assert(system.loadBios(bios));
