@@ -203,7 +203,7 @@ std::uint16_t ditheredColor24To15(std::uint32_t rgb, int x, int y) noexcept {
 
 void Gpu::executeFlatPolygon() noexcept {
     if (packet_.size() < 4) return;
-    const std::uint16_t color = static_cast<std::uint16_t>(color24To15(packet_[0]));
+    const std::uint32_t color = packet_[0] & 0x00FFFFFFu;
     const int offsetX = signExtend11(drawOffset_ & 0x7FFu);
     const int offsetY = signExtend11((drawOffset_ >> 11) & 0x7FFu);
     int x[4]{};
@@ -221,7 +221,7 @@ void Gpu::executeFlatPolygon() noexcept {
 }
 
 void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
-                       int x2, int y2, std::uint16_t color) noexcept {
+                       int x2, int y2, std::uint32_t rgb) noexcept {
     const long long area = edgeFunction(x0, y0, x1, y1, x2, y2);
     if (area == 0) return;
 
@@ -245,8 +245,13 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
             const bool inside = area > 0
                 ? (e0 >= 0 && e1 >= 0 && e2 >= 0)
                 : (e0 <= 0 && e1 <= 0 && e2 <= 0);
-            if (inside) vram_.writePixel(static_cast<std::uint32_t>(px),
-                                         static_cast<std::uint32_t>(py), color);
+            if (inside) {
+                const std::uint16_t color = (drawMode_ & (1u << 9)) != 0
+                    ? ditheredColor24To15(rgb, px, py)
+                    : static_cast<std::uint16_t>(color24To15(rgb));
+                vram_.writePixel(static_cast<std::uint32_t>(px),
+                                 static_cast<std::uint32_t>(py), color);
+            }
         }
     }
 }
