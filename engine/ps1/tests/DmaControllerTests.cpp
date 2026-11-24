@@ -1,4 +1,5 @@
 #include "DmaController.hpp"
+#include "Cdrom.hpp"
 #include "Gpu.hpp"
 #include "Ram.hpp"
 #include "Vram.hpp"
@@ -364,6 +365,35 @@ int main() {
         assert(ram.read32(0x80000u + i * 4u, value));
         assert(value == original);
     }
+
+    // Channel 3: request-mode CD-ROM sector DMA transfers 512 words to RAM.
+    Cdrom cdrom;
+    std::vector<std::uint8_t> cdImage(2048u, 0u);
+    for (std::size_t i = 0; i < cdImage.size(); ++i)
+        cdImage[i] = static_cast<std::uint8_t>((i & 3u) * 0x11u + 0x11u);
+    assert(cdrom.loadImage(cdImage));
+    cdrom.write8(0x1F801800u, 0u);
+    cdrom.write8(0x1F801802u, 0x00u);
+    cdrom.write8(0x1F801802u, 0x02u);
+    cdrom.write8(0x1F801802u, 0x00u);
+    cdrom.write8(0x1F801801u, 0x02u); // Setloc to LBA 0.
+    cdrom.write8(0x1F801801u, 0x06u); // ReadN.
+    cdrom.advance(Cdrom::kCyclesPerSector);
+    assert(cdrom.dataAvailableBytes() == 2048u);
+
+    assert(dma.write32(DmaController::kDpcrAddress, 1u << 15)); // Enable channel 3.
+    assert(dma.write32(DmaController::kDicrAddress, (1u << 23) | (1u << 19)));
+    assert(dma.write32(DmaController::kBaseAddress + 0x30u, 0x600u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x34u, 512u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x38u, 0x01000200u)); // Request, device -> RAM.
+    assert(dma.executeCdromTransfer(ram, cdrom));
+    assert(dma.lastCdromTransferWords() == 512u);
+    assert(cdrom.dataAvailableBytes() == 0u);
+    assert(dma.base(3) == 0xE00u);
+    assert((dma.dicr() & (1u << 27)) != 0u); // Channel 3 completion.
+    assert((dma.dicr() & 0x80000000u) != 0u); // Master DMA IRQ.
+    assert(ram.read32(0x600u, value) && value == 0x44332211u);
+    assert(ram.read32(0x7FCu, value) && value == 0x44332211u);
 
     dma.reset();
     assert(dma.read32(DmaController::kDpcrAddress, value) && value == 0x07654321u);
