@@ -198,5 +198,25 @@ int main() {
     fastCdrom.advance(Cdrom::kCyclesPerSector / 2u);
     assert(fastCdrom.dataAvailableBytes() == 2048u);
 
+    // MODE2/2352 uses a 24-byte header before its 2048-byte user-data area.
+    std::vector<std::uint8_t> mode2Bin(151u * 2352u, 0u);
+    std::fill(mode2Bin.begin() + 150u * 2352u + 24u,
+              mode2Bin.begin() + 150u * 2352u + 24u + 2048u, 0x7Cu);
+    const std::string mode2Cue =
+        "FILE \"mode2.bin\" BINARY\n"
+        " TRACK 01 MODE2/2352\n"
+        " INDEX 01 00:02:00\n";
+    Cdrom mode2Cdrom;
+    assert(mode2Cdrom.loadCue(mode2Cue, "mode2.bin", mode2Bin));
+    mode2Cdrom.write8(0x1F801802u, 0x00u);
+    mode2Cdrom.write8(0x1F801802u, 0x02u);
+    mode2Cdrom.write8(0x1F801802u, 0x00u);
+    mode2Cdrom.write8(0x1F801801u, 0x02u);
+    mode2Cdrom.read8(0x1F801801u, byte);
+    mode2Cdrom.write8(0x1F801801u, 0x06u);
+    mode2Cdrom.read8(0x1F801801u, byte);
+    mode2Cdrom.advance(Cdrom::kCyclesPerSector);
+    assert(mode2Cdrom.read8(0x1F801802u, byte) && byte == 0x7Cu);
+
     return 0;
 }
