@@ -179,6 +179,26 @@ long long edgeFunction(int ax, int ay, int bx, int by,
     return static_cast<long long>(px - ax) * (by - ay) -
            static_cast<long long>(py - ay) * (bx - ax);
 }
+
+std::uint16_t ditheredColor24To15(std::uint32_t rgb, int x, int y) noexcept {
+    // PS1 4x4 signed dither matrix, applied before reducing 8-bit channels
+    // to the 5-bit RGB values stored in VRAM.
+    constexpr int matrix[4][4] = {
+        {-4,  0, -3,  1},
+        { 2, -2,  3, -1},
+        {-3,  1, -4,  0},
+        { 3, -1,  2, -2}
+    };
+    const int adjustment = matrix[y & 3][x & 3];
+    auto reduce = [adjustment](std::uint32_t channel) noexcept {
+        const int adjusted = std::clamp(static_cast<int>(channel) + adjustment, 0, 255);
+        return static_cast<std::uint16_t>(adjusted >> 3);
+    };
+    const std::uint16_t r = reduce(rgb & 0xFFu);
+    const std::uint16_t g = reduce((rgb >> 8) & 0xFFu);
+    const std::uint16_t b = reduce((rgb >> 16) & 0xFFu);
+    return static_cast<std::uint16_t>(r | (g << 5) | (b << 10));
+}
 } // namespace
 
 void Gpu::executeFlatPolygon() noexcept {
@@ -431,9 +451,11 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
                 const std::uint32_t value = static_cast<std::uint32_t>(weighted / denominator);
                 rgb |= value << (channel * 8);
             }
+            const std::uint16_t output = (drawMode_ & (1u << 9)) != 0
+                ? ditheredColor24To15(rgb, px, py)
+                : static_cast<std::uint16_t>(color24To15(rgb));
             vram_.writePixel(static_cast<std::uint32_t>(px),
-                             static_cast<std::uint32_t>(py),
-                             static_cast<std::uint16_t>(color24To15(rgb)));
+                             static_cast<std::uint32_t>(py), output);
         }
     }
 }
