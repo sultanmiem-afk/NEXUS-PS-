@@ -16,6 +16,25 @@ int main() {
     assert(bus.read32(0x80200020u, word));
     assert(word == 0x12345678u);
 
+
+    // All four physical RAM mirrors must resolve through both KSEG aliases.
+    const std::uint32_t mirrors[] = {0x00000000u, 0x00200000u,
+                                     0x00400000u, 0x00600000u};
+    for (const auto mirror : mirrors) {
+        assert(bus.write32(mirror + 0x40u, 0x600D0000u | mirror));
+        assert(bus.read32(0x80000000u + mirror + 0x40u, word));
+        assert(word == (0x600D0000u | mirror));
+        assert(bus.read32(0xA0000000u + mirror + 0x40u, word));
+        assert(word == (0x600D0000u | mirror));
+    }
+
+    // KSEG2 and addresses beyond the 8 MiB RAM window are not RAM aliases.
+    std::uint8_t invalidByte = 0;
+    assert(!bus.read8(0x00800000u, invalidByte));
+    assert(!bus.write8(0x00800000u, 0x77u));
+    assert(!bus.read8(0xC0000000u, invalidByte));
+    assert(!bus.write8(0xC0000000u, 0x77u));
+
     // Scratchpad is an independent 1 KiB region.
     assert(bus.scratchpad().size() == 1024u);
     assert(bus.write32(0x1F800000u, 0xA1B2C3D4u));
