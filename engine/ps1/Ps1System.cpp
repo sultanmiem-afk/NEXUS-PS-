@@ -48,6 +48,8 @@ SystemStepResult Ps1System::step() {
     gpu_.serviceGp0Fifo(gpuTiming.gp0ServiceWords);
     memory_.timer0().setHBlankActive(gpuTiming.hBlankActive);
     memory_.timer1().setVBlankActive(gpuTiming.vBlankActive);
+    if (gpuTiming.vBlankStart)
+        memory_.interrupts().request(1u << 0); // I_STAT VBlank source
     result.timer0Irq = memory_.timer0().advance(result.cpu.cycles);
     result.timer1Irq = memory_.timer1().advance(result.cpu.cycles);
     result.timer2Irq = memory_.timer2().advance(result.cpu.cycles);
