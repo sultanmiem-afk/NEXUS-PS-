@@ -322,5 +322,65 @@ int main() {
         assert(cpu.cop0().read(Cop0::kBadVaddr)==0x102u);
     }
 
+    // Untaken REGIMM, BLEZ and BGTZ branches still execute their delay slots.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=1u;
+        put(bus,0,i_type(0x01,1,0,2)); // BLTZ r1, not taken
+        put(bus,4,i_type(0x09,0,2,21));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().next_pc==8u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==21u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=1u;
+        put(bus,0,i_type(0x06,1,0,2)); // BLEZ r1, not taken
+        put(bus,4,i_type(0x09,0,2,22));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().next_pc==8u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==22u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0u;
+        put(bus,0,i_type(0x07,1,0,2)); // BGTZ r1, not taken
+        put(bus,4,i_type(0x09,0,2,23));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().next_pc==8u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==23u);
+    }
+    // JR and JALR execute one delay-slot instruction; JALR writes PC+8 to rd.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=16u;
+        put(bus,0,r_type(1,0,0,0,0x08)); // JR r1
+        put(bus,4,i_type(0x09,0,2,31));
+        put(bus,16,i_type(0x09,0,3,32));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().pc==4u && cpu.state().next_pc==16u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==31u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==32u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=20u;
+        put(bus,0,r_type(1,0,5,0,0x09)); // JALR r5, r1
+        put(bus,4,i_type(0x09,0,2,41));
+        put(bus,20,i_type(0x09,0,3,42));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[5]==8u);
+        assert(cpu.state().pc==4u && cpu.state().next_pc==20u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==41u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==42u);
+    }
+
     return 0;
 }
