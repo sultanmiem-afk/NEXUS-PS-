@@ -80,6 +80,29 @@ int main() {
     gpu.writeGp0(100u | (120u << 16));
     assert(vram.readPixel(105u, 105u, pixel) && pixel == 0x3DEFu);
 
+    // Gouraud interpolation keeps exact vertex colors and uses weighted
+    // channel interpolation at interior samples.
+    gpu.writeGp0(0xE1000000u); // Disable dithering for exact RGB555 checks.
+    gpu.writeGp0(0x300000FFu);
+    gpu.writeGp0(900u | (900u << 16));
+    gpu.writeGp0(0x0000FF00u);
+    gpu.writeGp0(920u | (900u << 16));
+    gpu.writeGp0(0x00FF0000u);
+    gpu.writeGp0(900u | (920u << 16));
+    assert(vram.readPixel(900u, 900u, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(920u, 900u, pixel) && pixel == 0x03E0u);
+    assert(vram.readPixel(900u, 920u, pixel) && pixel == 0x7C00u);
+    assert(vram.readPixel(905u, 905u, pixel) && pixel == 0x1CEFu);
+
+    // Reversed winding must preserve the same interpolated color.
+    gpu.writeGp0(0x300000FFu);
+    gpu.writeGp0(900u | (900u << 16));
+    gpu.writeGp0(0x00FF0000u);
+    gpu.writeGp0(900u | (920u << 16));
+    gpu.writeGp0(0x0000FF00u);
+    gpu.writeGp0(920u | (900u << 16));
+    assert(vram.readPixel(905u, 905u, pixel) && pixel == 0x1CEFu);
+
     // 15-bit textured triangle samples texels from a configured texture page.
     vram.writePixel(0, 0, 0x7C00u);
     gpu.writeGp0(0xE1000200u); // 15-bit texture page mode.
