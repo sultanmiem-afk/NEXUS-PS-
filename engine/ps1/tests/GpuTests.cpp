@@ -237,8 +237,18 @@ int main() {
     gpu.writeGp1(0x03000001u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
 
-    // Approximate NTSC timing: 2172 CPU cycles produce one scanline HBlank
-    // pulse and 341 dot-clock ticks in the default 256-pixel mode.
+    // HBlank follows the programmed horizontal display interval rather than
+    // being emitted only at the scanline wrap.
+    gpu.reset();
+    const auto beforeVisible = gpu.advanceTiming(387u); // 608 GPU clocks
+    assert(beforeVisible.hBlankPulses == 0u);
+    assert(!beforeVisible.hBlankActive);
+    const auto afterVisible = gpu.advanceTiming(1629u); // reaches 3168 clocks
+    assert(afterVisible.hBlankPulses == 1u);
+    assert(afterVisible.hBlankActive);
+
+    // One complete modeled scanline still emits one HBlank pulse and 341
+    // dot-clock ticks in the default 256-pixel mode.
     gpu.reset();
     const auto partialTiming = gpu.advanceTiming(2171u);
     assert(partialTiming.hBlankPulses == 0u);
