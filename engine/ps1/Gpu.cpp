@@ -261,18 +261,23 @@ void Gpu::executePolyline() noexcept {
     const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
     const bool gouraud = (opcode & 0x10u) != 0u;
     const bool semiTransparent = (opcode & 0x02u) != 0u;
-    const int ox = signExtend11(drawOffset_ & 0x7FFu);
-    const int oy = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    const auto decodeCoordinate = [](std::uint32_t value) noexcept {
+        value &= 0x7FFu;
+        return (value & 0x400u) ? static_cast<int>(value) - 0x800
+                                : static_cast<int>(value);
+    };
+    const int ox = decodeCoordinate(drawOffset_);
+    const int oy = decodeCoordinate(drawOffset_ >> 11);
 
     if (!gouraud) {
         if (packet_.size() < 3u) return;
         const std::uint16_t color =
             static_cast<std::uint16_t>(color24To15(packet_[0]));
-        int previousX = signExtend11(packet_[1]) + ox;
-        int previousY = signExtend11(packet_[1] >> 16) + oy;
+        int previousX = decodeCoordinate(packet_[1]) + ox;
+        int previousY = decodeCoordinate(packet_[1] >> 16) + oy;
         for (std::size_t i = 2u; i < packet_.size(); ++i) {
-            const int x = signExtend11(packet_[i]) + ox;
-            const int y = signExtend11(packet_[i] >> 16) + oy;
+            const int x = decodeCoordinate(packet_[i]) + ox;
+            const int y = decodeCoordinate(packet_[i] >> 16) + oy;
             drawLine(previousX, previousY, x, y, color, semiTransparent);
             previousX = x;
             previousY = y;
