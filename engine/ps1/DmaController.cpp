@@ -27,7 +27,8 @@ std::uint32_t DmaController::channelControl(std::size_t channel) const noexcept 
 bool DmaController::masterIrq() const noexcept {
     const bool force = (dicrControl_ & (1u << 15)) != 0;
     const bool masterEnable = (dicrControl_ & (1u << 23)) != 0;
-    const bool enabledFlag = (dicrControl_ & dicrFlags_ & 0x7F000000u) != 0;
+    const std::uint32_t enabledChannels = (dicrControl_ << 8) & 0x7F000000u;
+    const bool enabledFlag = (enabledChannels & dicrFlags_) != 0;
     return force || (masterEnable && enabledFlag);
 }
 
