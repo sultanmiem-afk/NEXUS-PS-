@@ -34,6 +34,18 @@ int main() {
     gpu.writeGp0(220u | (220u << 16));
     assert(vram.readPixel(205, 205, pixel) && pixel == 0x03E0u);
 
+
+    // Gouraud-shaded triangle: red, green, and blue vertex colors interpolate.
+    gpu.writeGp0(0x300000FFu);
+    gpu.writeGp0(100u | (100u << 16));
+    gpu.writeGp0(0x0000FF00u);
+    gpu.writeGp0(120u | (100u << 16));
+    gpu.writeGp0(0x00FF0000u);
+    gpu.writeGp0(100u | (120u << 16));
+    assert(vram.readPixel(105, 105, pixel));
+    assert(pixel != 0x001Fu && pixel != 0x03E0u && pixel != 0x7C00u);
+    assert((pixel & 0x7FFFu) != 0);
+
     gpu.writeGp0(0x400000FFu);
     gpu.writeGp0(300u | (300u << 16));
     gpu.writeGp0(310u | (305u << 16));
