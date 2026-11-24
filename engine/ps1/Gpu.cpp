@@ -218,7 +218,7 @@ void Gpu::executePacket() {
         executeFillRectangle();
     } else if (opcode == 0x20 || opcode == 0x28) {
         executeFlatPolygon();
-    } else if (opcode >= 0x24 && opcode <= 0x27 || opcode >= 0x2C && opcode <= 0x2F) {
+    } else if ((opcode >= 0x24 && opcode <= 0x27) || (opcode >= 0x2C && opcode <= 0x2F)) {
         executeTexturedPolygon();
     } else if (opcode == 0x30 || opcode == 0x38) {
         executeGouraudPolygon();
