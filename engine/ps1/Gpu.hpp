@@ -95,6 +95,9 @@ private:
     std::size_t transferIndex_ = 0;
     std::uint32_t readLatch_ = 0;
     bool readLatchValid_ = false;
+    std::uint32_t gpuInfoLatch_ = 0;
+    bool gpuInfoPending_ = false;
+    bool oddField_ = false;
     bool irqPending_ = false;
     bool displayDisabled_ = true;
     std::uint32_t dmaDirection_ = 0;
@@ -128,6 +131,7 @@ private:
     bool readTransferPixel(std::uint16_t& pixel) noexcept;
     void finishTransfer() noexcept;
     void executeFillRectangle() noexcept;
+    void executeVramCopy() noexcept;
     void executeFlatPolygon() noexcept;
     void executeGouraudPolygon() noexcept;
     void executeTexturedPolygon() noexcept;
