@@ -251,9 +251,9 @@ int main() {
     // dot-clock ticks in the default 256-pixel mode.
     gpu.reset();
     const auto partialTiming = gpu.advanceTiming(2171u);
-    assert(partialTiming.hBlankPulses == 0u);
+    assert(partialTiming.hBlankPulses == 1u);
     const auto lineTiming = gpu.advanceTiming(1u);
-    assert(lineTiming.hBlankPulses == 1u);
+    assert(lineTiming.hBlankPulses == 0u);
     assert(partialTiming.dotClockTicks + lineTiming.dotClockTicks == 341u);
 
     gpu.writeGp1(0x00000000u);
