@@ -47,6 +47,12 @@ static std::uint32_t i_type(unsigned op, unsigned rs, unsigned rt, std::int16_t 
 static void put(TestBus& bus, unsigned address, std::uint32_t word) {
     assert(bus.write32(address, word));
 }
+static std::uint32_t r_type(unsigned rs, unsigned rt, unsigned rd, unsigned sh, unsigned fn) {
+    return (rs << 21) | (rt << 16) | (rd << 11) | (sh << 6) | fn;
+}
+static std::uint32_t j_type(unsigned op, unsigned target) {
+    return (op << 26) | ((target >> 2) & 0x03FFFFFFu);
+}
 
 int main() {
     {
@@ -115,5 +121,80 @@ int main() {
         assert(cpu.step().status == CpuStepStatus::Executed);
         assert(cpu.state().gpr[2] == 9); // following instruction's write wins
     }
+
+    // Register ALU and shift instruction coverage.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x80000001u; cpu.state().gpr[2]=3;
+        put(bus,0,r_type(0,1,3,1,0x00)); put(bus,4,r_type(0,1,4,1,0x02));
+        put(bus,8,r_type(0,1,5,1,0x03)); put(bus,12,r_type(2,1,6,0,0x04));
+        put(bus,16,r_type(2,1,7,0,0x06)); put(bus,20,r_type(2,1,8,0,0x07));
+        put(bus,24,r_type(1,2,9,0,0x24)); put(bus,28,r_type(1,2,10,0,0x25));
+        put(bus,32,r_type(1,2,11,0,0x26)); put(bus,36,r_type(1,2,12,0,0x27));
+        put(bus,40,r_type(1,2,13,0,0x2A)); put(bus,44,r_type(1,2,14,0,0x2B));
+        for(int i=0;i<12;i++) assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==2 && cpu.state().gpr[4]==0x40000000u);
+        assert(cpu.state().gpr[5]==0xC0000000u && cpu.state().gpr[6]==8u);
+        assert(cpu.state().gpr[7]==0x10000000u && cpu.state().gpr[8]==0xF0000000u);
+        assert(cpu.state().gpr[9]==1 && cpu.state().gpr[10]==0x80000003u);
+        assert(cpu.state().gpr[11]==0x80000002u && cpu.state().gpr[12]==0x7FFFFFFCu);
+        assert(cpu.state().gpr[13]==1 && cpu.state().gpr[14]==0);
+    }
+    // Immediate arithmetic/logical instructions.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0); cpu.state().gpr[1]=10;
+        put(bus,0,i_type(0x09,1,2,-3)); put(bus,4,i_type(0x0A,1,3,11));
+        put(bus,8,i_type(0x0B,1,4,-1)); put(bus,12,i_type(0x0C,1,5,7));
+        put(bus,16,i_type(0x0D,1,6,5)); put(bus,20,i_type(0x0E,1,7,3));
+        put(bus,24,i_type(0x0F,0,8,0x1234));
+        for(int i=0;i<7;i++) assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==7 && cpu.state().gpr[3]==1 && cpu.state().gpr[4]==1);
+        assert(cpu.state().gpr[5]==2 && cpu.state().gpr[6]==15 && cpu.state().gpr[7]==9);
+        assert(cpu.state().gpr[8]==0x12340000u);
+    }
+    // Byte, halfword and word load/store opcodes.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x100; cpu.state().gpr[2]=0x12345678u;
+        assert(bus.write32(0x100,0x80FF7F01u));
+        put(bus,0,i_type(0x20,1,3,0)); put(bus,4,0); // LB + load delay slot
+        put(bus,8,i_type(0x21,1,4,2)); put(bus,12,0); // LH
+        put(bus,16,i_type(0x23,1,5,0)); put(bus,20,0); // LW
+        put(bus,24,i_type(0x24,1,6,1)); put(bus,28,0); // LBU
+        put(bus,32,i_type(0x25,1,7,0)); put(bus,36,0); // LHU
+        put(bus,40,i_type(0x28,1,2,4)); // SB
+        put(bus,44,i_type(0x29,1,2,6)); // SH
+        put(bus,48,i_type(0x2B,1,2,8)); // SW
+        for(int i=0;i<13;i++) assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==1u);
+        assert(cpu.state().gpr[4]==0xFFFF80FFu);
+        assert(cpu.state().gpr[5]==0x80FF7F01u);
+        assert(cpu.state().gpr[6]==0xFFu && cpu.state().gpr[7]==0x7F01u);
+        std::uint32_t stored=0; assert(bus.read32(0x108,stored)); assert(stored==0x12345678u);
+    }
+    // JAL target, link address, and delay-slot execution.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        put(bus,0,j_type(0x03,16)); put(bus,4,i_type(0x09,0,1,5));
+        put(bus,16,i_type(0x09,0,2,6));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[31]==8 && cpu.state().pc==4 && cpu.state().next_pc==16);
+        assert(cpu.step().status==CpuStepStatus::Executed && cpu.state().gpr[1]==5);
+        assert(cpu.step().status==CpuStepStatus::Executed && cpu.state().gpr[2]==6);
+    }
+    // HI/LO multiply/divide and transfer operations.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=6; cpu.state().gpr[2]=7;
+        put(bus,0,r_type(1,2,0,0,0x18)); put(bus,4,r_type(0,0,3,0,0x12));
+        put(bus,8,r_type(0,0,4,0,0x10)); put(bus,12,r_type(1,2,0,0,0x1A));
+        put(bus,16,r_type(1,2,0,0,0x1B)); put(bus,20,r_type(1,0,0,0,0x11));
+        put(bus,24,r_type(2,0,0,0,0x13)); put(bus,28,r_type(0,0,5,0,0x10));
+        put(bus,32,r_type(0,0,6,0,0x12));
+        for(int i=0;i<9;i++) assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==42 && cpu.state().gpr[4]==0);
+        assert(cpu.state().gpr[5]==6 && cpu.state().gpr[6]==7);
+    }
+
     return 0;
 }
