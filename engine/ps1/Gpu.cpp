@@ -13,6 +13,7 @@ void Gpu::reset() noexcept {
     gp0Fifo_.clear();
     packet_.clear();
     expectedWords_ = 0;
+    variablePolyline_ = false;
     transferMode_ = TransferMode::None;
     transferX_ = transferY_ = transferWidth_ = transferHeight_ = 0;
     transferIndex_ = 0;
@@ -178,19 +179,29 @@ std::uint32_t Gpu::readGp0() {
 void Gpu::acceptPacketWord(std::uint32_t value) {
     if (packet_.empty()) {
         const std::uint8_t opcode = static_cast<std::uint8_t>(value >> 24);
+        variablePolyline_ = false;
         if (opcode == 0x00 || opcode == 0x01) return;
         if (opcode >= 0xE1 && opcode <= 0xE6) {
             executeEnvironmentCommand(value);
             return;
         }
         if (opcode == 0x02) expectedWords_ = 3;
-        else if (opcode == 0x20) expectedWords_ = 4;
+        else if (opcode == 0x20 || opcode == 0x22) expectedWords_ = 4;
         else if (opcode >= 0x24 && opcode <= 0x27) expectedWords_ = 7;
-        else if (opcode == 0x28) expectedWords_ = 5;
+        else if (opcode == 0x28 || opcode == 0x2A) expectedWords_ = 5;
         else if (opcode >= 0x2C && opcode <= 0x2F) expectedWords_ = 9;
-        else if (opcode == 0x30) expectedWords_ = 6;
-        else if (opcode == 0x38) expectedWords_ = 8;
-        else if (opcode == 0x40) expectedWords_ = 3;
+        else if (opcode == 0x30 || opcode == 0x32) expectedWords_ = 6;
+        else if (opcode == 0x34) expectedWords_ = 9;
+        else if (opcode == 0x38 || opcode == 0x3A) expectedWords_ = 8;
+        else if (opcode == 0x3C) expectedWords_ = 12;
+        else if (opcode == 0x40 || opcode == 0x42) expectedWords_ = 3;
+        else if (opcode >= 0x48 && opcode <= 0x4F) {
+            // Poly-lines have no fixed packet length. Their final XY word is
+            // the GP0 terminator 0x50005000; discard the unsupported packet
+            // as a unit so its vertices cannot be reinterpreted as commands.
+            variablePolyline_ = true;
+            ++unsupportedCommandCount_;
+        }
         else if (opcode >= 0x60 && opcode <= 0x63) expectedWords_ = 3;
         else if (opcode >= 0x64 && opcode <= 0x67) expectedWords_ = 4;
         else if ((opcode >= 0x68 && opcode <= 0x6B) ||
@@ -199,18 +210,38 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         else if ((opcode >= 0x6C && opcode <= 0x6F) ||
                  (opcode >= 0x74 && opcode <= 0x77) ||
                  (opcode >= 0x7C && opcode <= 0x7F)) expectedWords_ = 3;
+        else if (opcode == 0x80) expectedWords_ = 4;
         else if (opcode == 0xA0 || opcode == 0xC0) expectedWords_ = 3;
         else {
             ++unsupportedCommandCount_;
             return;
         }
+        if (opcode == 0x22 || opcode == 0x2A || opcode == 0x32 ||
+            opcode == 0x3A || opcode == 0x34 || opcode == 0x3C ||
+            opcode == 0x42 || opcode == 0x80) {
+            ++unsupportedCommandCount_;
+        }
     }
 
     packet_.push_back(value);
+    if (variablePolyline_) {
+        const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
+        const bool gouraudPolyline = (opcode & 0x04u) != 0u;
+        const bool isVertexWord = gouraudPolyline
+            ? (packet_.size() >= 4u && (packet_.size() % 2u) == 0u)
+            : packet_.size() >= 3u;
+        if (isVertexWord && value == 0x50005000u) {
+            packet_.clear();
+            expectedWords_ = 0;
+            variablePolyline_ = false;
+        }
+        return;
+    }
     if (packet_.size() == expectedWords_) {
         executePacket();
         packet_.clear();
         expectedWords_ = 0;
+        variablePolyline_ = false;
     }
 }
 
