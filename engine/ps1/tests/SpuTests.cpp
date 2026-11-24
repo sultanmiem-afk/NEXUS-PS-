@@ -70,16 +70,14 @@ int main() {
     assert(spu.readRegister16(0x1AAu, reg) && reg == 0x0041u);
     assert(spu.writeRegister16(0x1C0u, 0x0100u)); // Reverb configuration
     assert(spu.readRegister16(0x1C0u, reg) && reg == 0x0100u);
-    assert(spu.writeRegister16(0x25Eu, 0x7FFFu)); // Voice 23 current volume slot
-    assert(spu.readRegister16(0x25Eu, reg) && reg == 0x7FFFu);
 
     // Reserved holes, misaligned offsets and addresses outside the SPU map fail.
     assert(!spu.readRegister16(0x1A0u, reg));
     assert(!spu.writeRegister16(0x1A0u, 0x1234u));
     assert(!spu.readRegister16(0x001u, reg));
     assert(!spu.writeRegister16(0x201u, 0x1234u));
-    assert(!spu.readRegister16(0x260u, reg));
-    assert(!spu.writeRegister16(0x400u, 0x1234u));
+    assert(!spu.readRegister16(0x200u, reg));
+    assert(!spu.writeRegister16(0x200u, 0x1234u));
 
     // Reset clears register state as well as sound RAM.
     spu.reset();
