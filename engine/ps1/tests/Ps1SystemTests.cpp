@@ -79,6 +79,20 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
     assert(system.cpu().state().pc == 0x80000080u);
 
+    // Timer 0 advances from CPU cycle estimates and raises I_STAT source 4.
+    system.reset(0x00000000u);
+    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 4));
+    assert(system.memory().write32(Timer0::kTargetAddress, 1u));
+    assert(system.memory().write32(Timer0::kModeAddress, 1u << 4)); // IRQ at target
+    putWord(system.memory().ram(), 0, 0x00000000u); // NOP: one modeled CPU cycle
+    const auto timerStep = system.step();
+    assert(timerStep.cpu.status == CpuStepStatus::Executed);
+    assert(timerStep.timer0Irq);
+    assert((system.memory().interrupts().status() & (1u << 4)) != 0u);
+    system.cpu().cop0().write(Cop0::kStatus, (1u << 0) | (1u << 10));
+    assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(system.cpu().state().pc == 0x80000080u);
+
     // BIOS loading validates exact image size and remains loaded across reset.
     std::vector<std::uint8_t> bios(BiosRom::kSize, 0);
     assert(system.loadBios(bios));
