@@ -236,6 +236,16 @@ int main() {
     assert((gpu.readStatus() & (1u << 23)) == 0);
     gpu.writeGp1(0x03000001u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
+
+    // Approximate NTSC timing: 2172 CPU cycles produce one scanline HBlank
+    // pulse and 341 dot-clock ticks in the default 256-pixel mode.
+    gpu.reset();
+    const auto partialTiming = gpu.advanceTiming(2171u);
+    assert(partialTiming.hBlankPulses == 0u);
+    const auto lineTiming = gpu.advanceTiming(1u);
+    assert(lineTiming.hBlankPulses == 1u);
+    assert(partialTiming.dotClockTicks + lineTiming.dotClockTicks == 341u);
+
     gpu.writeGp1(0x00000000u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
     return 0;
