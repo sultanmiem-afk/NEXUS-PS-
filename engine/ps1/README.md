@@ -1,30 +1,40 @@
 # NEXUS PS — CPU core
 
 The PlayStation uses a MIPS R3000A-compatible CPU. This directory contains
-an expanding portable interpreter foundation.
+an early portable interpreter and CP0 foundation.
 
-## Implemented foundation
+## Implemented so far
 
-- 32 GPRs with hard-wired register zero, HI/LO, PC, and next-PC state.
-- Instruction-field decoder and reset vector initialization.
-- Bus abstraction so the machine layer can provide RAM, BIOS, scratchpad,
-  address mirrors, and memory-mapped I/O.
-- Integer shifts, register arithmetic/logical operations, comparisons,
-  multiply/divide, jumps, branches, immediate operations, and basic byte,
-  halfword, and word loads/stores.
-- Branch delay-slot sequencing for normal branch and jump flow.
-- Alignment and bus-fault reporting.
-- No BIOS or game images are included.
+- 32 general-purpose registers with register zero hard-wired to zero.
+- HI/LO registers and PC/next-PC state.
+- MIPS instruction field decoder.
+- Bus interface for the future memory subsystem.
+- Initial integer shifts, arithmetic/logical operations, comparisons,
+  multiply/divide, branches, jumps, immediates, and basic byte/halfword/word
+  loads and stores.
+- Branch-delay sequencing for ordinary branches and jumps.
+- CP0 register file with Status, Cause, EPC, and BadVaddr access.
+- MFC0, MTC0, and RFE instruction handling.
+- Initial exception entry for syscall, breakpoint, reserved instruction,
+  arithmetic overflow, and misaligned memory accesses.
+- Exception mode-stack handling and BEV-dependent exception vector selection.
 
-## Accuracy and performance roadmap
+## Important accuracy limits
 
-1. Add CP0 registers, exception vectors, EPC/Cause/Status behavior, and
-   precise delay-slot exception handling.
-2. Implement R3000A load-delay behavior and validate all instruction edge cases.
-3. Add instruction/cycle timing appropriate to the PS1 and hardware stalls.
-4. Add automated CPU tests and compare behavior against trusted test suites.
-5. Profile on Android before choosing interpreter optimizations or a dynarec.
+This is not a complete or cycle-accurate R3000A implementation yet.
+Load-delay behavior, interrupt delivery, all exception corner cases,
+unaligned merge instructions (LWL/LWR/SWL/SWR), coprocessor 2/GTE operations,
+precise bus-error handling, and hardware timing still need implementation.
+The current cycle counts are rough estimates, not a hardware timing model.
 
-This is not yet a complete or cycle-accurate CPU, and it cannot boot games
-until the memory bus, GPU, DMA, timers, interrupts, BIOS loading, and other
-machine components are implemented.
+## Next milestones
+
+1. Implement load-delay behavior and remaining base CPU instructions.
+2. Add automated instruction and exception tests, then compile with the
+   Android NDK toolchain.
+3. Connect the CPU to PS1 RAM, BIOS, scratchpad, and memory-mapped I/O.
+4. Add interrupt/timer/DMA interactions and improve timing accuracy.
+5. Profile on Android before considering a dynamic recompiler.
+
+No BIOS or game images are included. This CPU foundation cannot boot games
+until the rest of the PlayStation hardware is implemented.
