@@ -13,6 +13,7 @@ add_library(nexus_ps1_cpu
     MemoryBus.cpp
     DmaController.cpp
     InterruptController.cpp
+    Timer0.cpp
     Ps1System.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -48,6 +49,10 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_interrupt_tests tests/InterruptControllerTests.cpp)
     target_link_libraries(nexus_ps1_interrupt_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_interrupt_tests COMMAND nexus_ps1_interrupt_tests)
+
+    add_executable(nexus_ps1_timer0_tests tests/Timer0Tests.cpp)
+    target_link_libraries(nexus_ps1_timer0_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_timer0_tests COMMAND nexus_ps1_timer0_tests)
 
     add_executable(nexus_ps1_system_tests tests/Ps1SystemTests.cpp)
     target_link_libraries(nexus_ps1_system_tests PRIVATE nexus_ps1_cpu)
