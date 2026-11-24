@@ -29,7 +29,7 @@ bool Timer1::advance(std::uint32_t cpuCycles) noexcept {
     bool irq = false;
     for (std::uint32_t i = 0; i < cpuCycles; ++i) {
         const auto next = static_cast<std::uint32_t>(counter_) + 1u;
-        const bool targetHit = next == target_;
+        const bool targetHit = next == target_ || (overflow && target_ == 0u);
         const bool overflow = next > 0xFFFFu;
         if (targetHit) reachedTarget_ = true;
         if (overflow) reachedOverflow_ = true;
@@ -37,8 +37,13 @@ bool Timer1::advance(std::uint32_t cpuCycles) noexcept {
         const bool event = (targetHit && (mode_ & kIrqAtTarget) != 0u) ||
                            (overflow && (mode_ & kIrqAtOverflow) != 0u);
         if (event && ((mode_ & kIrqRepeat) != 0u || irqArmed_)) {
-            irq = true;
-            irqRequest_ = false;
+            if ((mode_ & kIrqToggle) != 0u) {
+                irqRequest_ = !irqRequest_;
+                irq = !irqRequest_; // Interrupt on the active (high-to-low) transition.
+            } else {
+                irqRequest_ = false;
+                irq = true;
+            }
             if ((mode_ & kIrqRepeat) == 0u) irqArmed_ = false;
         }
 
@@ -47,9 +52,6 @@ bool Timer1::advance(std::uint32_t cpuCycles) noexcept {
         else
             counter_ = static_cast<std::uint16_t>(next);
     }
-    // Toggle mode affects the physical IRQ output waveform. The interrupt
-    // controller latches requests, so the initial model reports each event.
-    (void)kIrqToggle;
     return irq;
 }
 
