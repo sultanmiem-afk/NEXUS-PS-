@@ -364,7 +364,7 @@ int main() {
             assert(stressFifo.push(0x5A000000u | expectedNext));
             ++expectedNext;
         }
-        for (std::uint32_t i = 0; i < 9u; ++i) {
+        for (std::uint32_t i = 0; i < 12u; ++i) {
             assert(stressFifo.pop(fifoWord));
             assert(fifoWord == (0x5A000000u | consumed));
             ++consumed;
