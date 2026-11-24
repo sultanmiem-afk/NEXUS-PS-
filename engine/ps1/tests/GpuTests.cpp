@@ -322,5 +322,36 @@ int main() {
     assert((status & (1u << 25)) == 0);
     assert((status & (1u << 26)) != 0);
     assert((status & (1u << 28)) != 0);
+
+    // Bounded GP0 FIFO primitive: capacity, overflow, ordering and wraparound.
+    GpuFifo fifo;
+    assert(fifo.empty());
+    assert(!fifo.full());
+    assert(fifo.capacity() == 16u);
+    std::uint32_t fifoWord = 0xFFFFFFFFu;
+    assert(!fifo.pop(fifoWord));
+    for (std::uint32_t i = 0; i < fifo.capacity(); ++i) {
+        assert(fifo.push(0xA5000000u | i));
+    }
+    assert(fifo.full());
+    assert(fifo.size() == fifo.capacity());
+    assert(!fifo.push(0xDEADBEEFu)); // Full FIFO rejects new data.
+    for (std::uint32_t i = 0; i < 8u; ++i) {
+        assert(fifo.pop(fifoWord));
+        assert(fifoWord == (0xA5000000u | i));
+    }
+    for (std::uint32_t i = 16u; i < 24u; ++i) {
+        assert(fifo.push(0xA5000000u | i)); // Reuses wrapped slots.
+    }
+    for (std::uint32_t i = 8u; i < 24u; ++i) {
+        assert(fifo.pop(fifoWord));
+        assert(fifoWord == (0xA5000000u | i));
+    }
+    assert(fifo.empty());
+    assert(!fifo.pop(fifoWord));
+    assert(fifo.push(0x12345678u));
+    fifo.clear();
+    assert(fifo.empty());
+    assert(fifo.size() == 0u);
     return 0;
 }
