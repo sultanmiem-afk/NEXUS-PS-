@@ -48,16 +48,41 @@ int main() {
 
 
     // 15-bit textured triangle samples texels from a configured texture page.
-    vram.writePixel(64, 0, 0x7C00u);
+    vram.writePixel(0, 0, 0x7C00u);
     gpu.writeGp0(0xE1000200u); // 15-bit texture page mode.
     gpu.writeGp0(0x24000000u);
     gpu.writeGp0(400u | (100u << 16));
     gpu.writeGp0(0u);
     gpu.writeGp0(420u | (100u << 16));
-    gpu.writeGp0(0x02000000u); // UV and page (page X=64, 15-bit).
+    gpu.writeGp0(0x01000000u); // UV and 15-bit direct-color page.
     gpu.writeGp0(400u | (120u << 16));
     gpu.writeGp0(0u);
     assert(vram.readPixel(405, 105, pixel) && pixel == 0x7C00u);
+
+
+    // 4-bit indexed texture: nibble index resolves through a 16-color CLUT.
+    vram.writePixel(128, 10, 0x0003u); // pixel index 3 in low nibble.
+    vram.writePixel(48, 20, 0x03E0u);  // CLUT entry 3.
+    gpu.writeGp0(0x24000000u);
+    gpu.writeGp0(500u | (100u << 16));
+    gpu.writeGp0(0u | (1u << 16)); // CLUT X=0, Y=1.
+    gpu.writeGp0(520u | (100u << 16));
+    gpu.writeGp0(0x00000000u); // UV + tpage: 4-bit page at X=128.
+    gpu.writeGp0(500u | (120u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(505, 105, pixel) && pixel == 0x03E0u);
+
+    // 8-bit indexed texture: byte index resolves through its CLUT.
+    vram.writePixel(192, 30, 0x002Au); // low byte index 42.
+    vram.writePixel(42, 40, 0x7C00u);  // CLUT entry 42.
+    gpu.writeGp0(0x24000000u);
+    gpu.writeGp0(550u | (100u << 16));
+    gpu.writeGp0(0u | (2u << 16)); // CLUT Y=2.
+    gpu.writeGp0(570u | (100u << 16));
+    gpu.writeGp0(0x00000080u); // tpage depth bits = 1 (8-bit), page X=192.
+    gpu.writeGp0(550u | (120u << 16));
+    gpu.writeGp0(0u);
+    assert(vram.readPixel(555, 105, pixel) && pixel == 0x7C00u);
 
     gpu.writeGp0(0x400000FFu);
     gpu.writeGp0(300u | (300u << 16));
