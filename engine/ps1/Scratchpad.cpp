@@ -11,6 +11,7 @@ void Scratchpad::clear(std::uint8_t value) noexcept {
 }
 
 bool Scratchpad::translate(std::uint32_t address, std::size_t& offset) const noexcept {
+    if (address >= 0xC0000000u) return false;
     const std::uint32_t physical = address & 0x1FFFFFFFu;
     if (physical < kBaseAddress || physical >= kBaseAddress + kSize) return false;
     offset = static_cast<std::size_t>(physical - kBaseAddress);
