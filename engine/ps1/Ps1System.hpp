@@ -27,6 +27,7 @@ public:
 
     void reset(std::uint32_t resetVector = 0xBFC00000u) noexcept;
     bool loadBios(const std::vector<std::uint8_t>& image) noexcept;
+    bool loadDiscImage(const std::vector<std::uint8_t>& image) noexcept;
 
     SystemStepResult step();
 
