@@ -9,6 +9,7 @@ add_library(nexus_ps1_cpu
     Scratchpad.cpp
     BiosRom.cpp
     Vram.cpp
+    Gpu.cpp
     MemoryBus.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -32,4 +33,8 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_bios_vram_tests tests/BiosVramTests.cpp)
     target_link_libraries(nexus_ps1_bios_vram_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_bios_vram_tests COMMAND nexus_ps1_bios_vram_tests)
+
+    add_executable(nexus_ps1_gpu_tests tests/GpuTests.cpp)
+    target_link_libraries(nexus_ps1_gpu_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_gpu_tests COMMAND nexus_ps1_gpu_tests)
 endif()
