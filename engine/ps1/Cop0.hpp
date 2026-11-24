@@ -37,6 +37,7 @@ public:
                          std::uint32_t bad_vaddr = 0) noexcept;
     void return_from_exception() noexcept;
     void setHardwareInterruptPending(bool pending) noexcept;
+    bool interruptPending() const noexcept;
 
 private:
     std::array<std::uint32_t, 16> regs_{};
