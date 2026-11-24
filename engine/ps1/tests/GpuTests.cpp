@@ -79,7 +79,7 @@ int main() {
     gpu.writeGp0(550u | (100u << 16));
     gpu.writeGp0(0u | (128u << 16)); // CLUT X=0, Y=2.
     gpu.writeGp0(570u | (100u << 16));
-    gpu.writeGp0(0x00000080u); // tpage depth bits = 1 (8-bit), page X=0.
+    gpu.writeGp0(0x00800000u); // tpage depth bits = 1 (8-bit), page X=0.
     gpu.writeGp0(550u | (120u << 16));
     gpu.writeGp0(0u);
     assert(vram.readPixel(555, 105, pixel) && pixel == 0x7C00u);
