@@ -101,7 +101,7 @@ private:
     std::uint32_t verticalRange_ = 0x3FC10u;
     std::uint32_t displayMode_ = 0;
     std::uint32_t gpuClockRemainder_ = 0;
-    std::uint32_t gp0ServiceRemainder_ = 0;
+    std::uint32_t gp0ServiceCycleRemainder_ = 0;
     std::uint32_t scanlineClock_ = 0;
     std::uint32_t scanline_ = 0;
     std::uint32_t dotClockRemainder_ = 0;
