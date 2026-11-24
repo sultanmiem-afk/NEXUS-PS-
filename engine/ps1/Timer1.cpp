@@ -29,8 +29,8 @@ bool Timer1::advance(std::uint32_t cpuCycles) noexcept {
     bool irq = false;
     for (std::uint32_t i = 0; i < cpuCycles; ++i) {
         const auto next = static_cast<std::uint32_t>(counter_) + 1u;
-        const bool targetHit = next == target_ || (overflow && target_ == 0u);
         const bool overflow = next > 0xFFFFu;
+        const bool targetHit = next == target_ || (overflow && target_ == 0u);
         if (targetHit) reachedTarget_ = true;
         if (overflow) reachedOverflow_ = true;
 
