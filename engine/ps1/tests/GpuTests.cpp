@@ -581,12 +581,11 @@ int main() {
     gpu.writeGp0(200u | (100u << 16));
     gpu.writeGp0(0xA0000000u); // Black vertex color; must not start image transfer.
     gpu.writeGp0(210u | (100u << 16));
-    gpu.writeGp0(0x0000FF00u); // Green vertex color.
-    gpu.writeGp0(220u | (100u << 16));
-    gpu.writeGp0(0x55555555u); // XY terminator.
+    gpu.writeGp0(0x0000FF00u); // Unused next-vertex color before terminator.
+    gpu.writeGp0(0x55555555u); // Terminator replaces the next XY word.
     assert(vram.readPixel(200u, 100u, pixel) && pixel == 0x001Fu);
     assert(vram.readPixel(210u, 100u, pixel) && pixel == 0x0000u);
-    assert(vram.readPixel(220u, 100u, pixel) && pixel == 0x03E0u);
+    assert(vram.readPixel(205u, 100u, pixel) && pixel != 0x001Fu && pixel != 0x0000u);
     gpu.writeGp0(0x020000FFu);
     gpu.writeGp0(930u | (450u << 16));
     gpu.writeGp0(1u | (1u << 16));
@@ -597,12 +596,11 @@ int main() {
     gpu.writeGp0(230u | (100u << 16));
     gpu.writeGp0(0x0000FF00u);
     gpu.writeGp0(240u | (100u << 16));
-    gpu.writeGp0(0x00FF0000u);
-    gpu.writeGp0(250u | (100u << 16));
+    gpu.writeGp0(0x00FF0000u); // Unused next-vertex color before terminator.
     gpu.writeGp0(0x52345234u);
     assert(vram.readPixel(230u, 100u, pixel) && pixel == 0x001Fu);
-    assert(vram.readPixel(240u, 100u, pixel) && pixel != 0x001Fu);
-    assert(vram.readPixel(250u, 100u, pixel) && pixel == 0x7C00u);
+    assert(vram.readPixel(240u, 100u, pixel) && pixel == 0x03E0u);
+    assert(vram.readPixel(235u, 100u, pixel) && pixel != 0x001Fu && pixel != 0x03E0u);
     gpu.writeGp0(0x020000FFu);
     gpu.writeGp0(920u | (450u << 16));
     gpu.writeGp0(1u | (1u << 16));
