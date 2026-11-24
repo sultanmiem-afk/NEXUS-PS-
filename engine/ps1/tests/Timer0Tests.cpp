@@ -36,8 +36,10 @@ int main() {
 
     // Sync and non-CPU clock sources are not advanced by CPU cycles yet.
     assert(timer.write32(Timer0::kModeAddress, 1u));
+    timer.setHBlankActive(true);
     assert(!timer.advance(10u));
     assert(timer.counter() == 0u);
+    timer.setHBlankActive(false);
     assert(timer.write32(Timer0::kModeAddress, 1u << 8));
     assert(!timer.advance(10u));
     assert(timer.counter() == 0u);
@@ -70,6 +72,39 @@ int main() {
     assert(timer.advance(1u));
     assert(timer.counter() == 0u);
     assert((timer.mode() & (1u << 11)) != 0u);
+
+    // Sync mode 1 resets at HBlank and then counts continuously.
+    timer.setHBlankActive(false);
+    assert(timer.write32(Timer0::kCounterAddress, 50u));
+    assert(timer.write32(Timer0::kModeAddress, 1u | (1u << 1)));
+    assert(timer.advance(3u) == false);
+    assert(timer.counter() == 3u);
+    timer.setHBlankActive(true);
+    assert(timer.counter() == 0u);
+    assert(!timer.advance(2u));
+    assert(timer.counter() == 2u);
+
+    // Sync mode 2 counts only inside HBlank and resets on its leading edge.
+    timer.setHBlankActive(false);
+    assert(timer.write32(Timer0::kModeAddress, 1u | (2u << 1)));
+    assert(!timer.advance(4u));
+    assert(timer.counter() == 0u);
+    timer.setHBlankActive(true);
+    assert(!timer.advance(2u));
+    assert(timer.counter() == 2u);
+    timer.setHBlankActive(false);
+    assert(!timer.advance(4u));
+    assert(timer.counter() == 2u);
+
+    // Sync mode 3 waits for the first HBlank, then free-runs.
+    assert(timer.write32(Timer0::kModeAddress, 1u | (3u << 1)));
+    timer.setHBlankActive(false);
+    assert(!timer.advance(5u));
+    assert(timer.counter() == 0u);
+    timer.setHBlankActive(true);
+    timer.setHBlankActive(false);
+    assert(!timer.advance(5u));
+    assert(timer.counter() == 5u);
 
     return 0;
 }
