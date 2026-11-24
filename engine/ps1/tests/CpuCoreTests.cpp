@@ -196,5 +196,39 @@ int main() {
         assert(cpu.state().gpr[5]==6 && cpu.state().gpr[6]==7);
     }
 
+    // Not-taken conditional branches still execute exactly one delay-slot instruction.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1] = 1;
+        put(bus,0,i_type(0x04,1,0,3)); // BEQ r1, r0, +3 (not taken)
+        put(bus,4,i_type(0x09,0,2,11)); // delay slot
+        put(bus,8,i_type(0x09,0,3,13)); // sequential instruction
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().pc==4 && cpu.state().next_pc==8);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==11 && cpu.state().pc==8);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[3]==13);
+    }
+    // Signed divide corner cases: overflow and division by zero.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x80000000u; cpu.state().gpr[2]=0xFFFFFFFFu;
+        put(bus,0,r_type(1,2,0,0,0x1A)); // INT_MIN / -1
+        put(bus,4,r_type(1,0,0,0,0x1A)); // INT_MIN / 0
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().lo==0x80000000u && cpu.state().hi==0u);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().lo==1u && cpu.state().hi==0x80000000u);
+    }
+    // Unsigned divide by zero follows the R3000A HI/LO result convention.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=123u; cpu.state().gpr[2]=0u;
+        put(bus,0,r_type(1,2,0,0,0x1B));
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().lo==0xFFFFFFFFu && cpu.state().hi==123u);
+    }
+
     return 0;
 }
