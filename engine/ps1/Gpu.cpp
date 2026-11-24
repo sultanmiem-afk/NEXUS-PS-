@@ -201,7 +201,6 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
             // Poly-lines are variable-length. Both flat and Gouraud variants
             // end when an XY word has the 5xxx5xxx terminator pattern.
             variablePolyline_ = true;
-            ++unsupportedCommandCount_;
         }
         else if (opcode >= 0x60 && opcode <= 0x63) expectedWords_ = 3;
         else if (opcode >= 0x64 && opcode <= 0x67) expectedWords_ = 4;
@@ -234,9 +233,18 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
             ? (packet_.size() >= 4u && (packet_.size() % 2u) == 0u)
             : packet_.size() >= 3u;
         if (isVertexWord && (value & 0xF000F000u) == 0x50005000u) {
+            // The terminator occupies an XY slot and is not a drawable vertex.
+            packet_.pop_back();
+            executePolyline();
             packet_.clear();
             expectedWords_ = 0;
             variablePolyline_ = false;
+        } else if (packet_.size() >= 4096u) {
+            // Bound malformed streams that never provide a polyline terminator.
+            packet_.clear();
+            expectedWords_ = 0;
+            variablePolyline_ = false;
+            ++unsupportedCommandCount_;
         }
         return;
     }
@@ -246,6 +254,48 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         expectedWords_ = 0;
         variablePolyline_ = false;
     }
+}
+
+void Gpu::executePolyline() noexcept {
+    if (packet_.empty()) return;
+    const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
+    const bool gouraud = (opcode & 0x10u) != 0u;
+    const bool semiTransparent = (opcode & 0x02u) != 0u;
+    const int ox = signExtend11(drawOffset_ & 0x7FFu);
+    const int oy = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+
+    if (!gouraud) {
+        if (packet_.size() < 3u) return;
+        const std::uint16_t color =
+            static_cast<std::uint16_t>(color24To15(packet_[0]));
+        int previousX = signExtend11(packet_[1]) + ox;
+        int previousY = signExtend11(packet_[1] >> 16) + oy;
+        for (std::size_t i = 2u; i < packet_.size(); ++i) {
+            const int x = signExtend11(packet_[i]) + ox;
+            const int y = signExtend11(packet_[i] >> 16) + oy;
+            drawLine(previousX, previousY, x, y, color, semiTransparent);
+            previousX = x;
+            previousY = y;
+        }
+        return;
+    }
+
+    // Gouraud packet layout: command(color0), XY0, color1, XY1, ...
+    if (packet_.size() < 4u || (packet_.size() & 1u) != 0u) return;
+    const std::vector<std::uint32_t> polyline = packet_;
+    std::vector<std::uint32_t> segment(4u);
+    segment[0] = (static_cast<std::uint32_t>(opcode) << 24u) |
+                 (polyline[0] & 0x00FFFFFFu);
+    for (std::size_t xyIndex = 1u; xyIndex + 2u < polyline.size(); xyIndex += 2u) {
+        segment[1] = polyline[xyIndex];
+        segment[2] = polyline[xyIndex + 1u];
+        segment[3] = polyline[xyIndex + 2u];
+        packet_ = segment;
+        executeGouraudLine();
+        segment[0] = (static_cast<std::uint32_t>(opcode) << 24u) |
+                     (polyline[xyIndex + 1u] & 0x00FFFFFFu);
+    }
+    packet_ = polyline;
 }
 
 void Gpu::executePacket() {
