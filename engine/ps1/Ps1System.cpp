@@ -29,6 +29,8 @@ SystemStepResult Ps1System::step() {
     result.dmaTransferred = memory_.dma().executeGpuTransfer(memory_.ram(), gpu_);
     if (result.dmaTransferred)
         result.dmaWords = memory_.dma().lastTransferWords();
+    if (memory_.dma().irqPending())
+        memory_.interrupts().request(1u << 3); // I_STAT DMA source
     return result;
 }
 
