@@ -259,16 +259,19 @@ int main() {
     gpu.writeGp1(0x00000000u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
 
-    // GP0 FIFO service credits follow GPU clock time and preserve fractional phase.
+    // GP0 FIFO service uses a fixed 10-CPU-cycle word budget and preserves
+    // fractional cycle credit across small CPU steps.
     gpu.reset();
-    const auto fifoTimingA = gpu.advanceTiming(1u);
+    const auto fifoTimingA = gpu.advanceTiming(9u);
     assert(fifoTimingA.gp0ServiceWords == 0u);
     const auto fifoTimingB = gpu.advanceTiming(1u);
     assert(fifoTimingB.gp0ServiceWords == 1u);
-    const auto fifoTimingC = gpu.advanceTiming(1u);
-    assert(fifoTimingC.gp0ServiceWords == 1u);
+    const auto fifoTimingC = gpu.advanceTiming(9u);
+    assert(fifoTimingC.gp0ServiceWords == 0u);
     const auto fifoTimingD = gpu.advanceTiming(1u);
     assert(fifoTimingD.gp0ServiceWords == 1u);
+    const auto fifoTimingBatch = gpu.advanceTiming(25u);
+    assert(fifoTimingBatch.gp0ServiceWords == 2u);
 
     // GPUSTAT readiness and DMA request bits follow the selected direction.
     gpu.reset();
