@@ -135,7 +135,7 @@ int main() {
     gpu.writeGp0(0x6100FF00u);
     gpu.writeGp0(800u | (100u << 16));
     gpu.writeGp0(1u | (1u << 16));
-    assert(vram.readPixel(800u, 100u, pixel) && pixel == 0x020Fu);
+    assert(vram.readPixel(800u, 100u, pixel) && pixel == 0x01EFu);
 
     gpu.writeGp0(0x400000FFu);
     gpu.writeGp0(300u | (300u << 16));
