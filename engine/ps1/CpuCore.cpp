@@ -16,10 +16,28 @@ void CpuCore::reset(std::uint32_t reset_vector) noexcept {
     state_.reset(reset_vector);
     cop0_.reset();
     in_delay_slot_ = false;
+    pending_load_valid_ = false;
+    pending_load_register_ = 0;
+    pending_load_value_ = 0;
 }
 
 void CpuCore::write_reg(std::uint32_t index, std::uint32_t value) noexcept {
     if (index != 0) state_.gpr[index & 31u] = value;
+    state_.gpr[0] = 0;
+}
+
+void CpuCore::schedule_load(std::uint32_t index, std::uint32_t value) noexcept {
+    pending_load_valid_ = index != 0;
+    pending_load_register_ = index & 31u;
+    pending_load_value_ = value;
+}
+
+void CpuCore::commit_pending_load() noexcept {
+    if (pending_load_valid_ && pending_load_register_ != 0)
+        state_.gpr[pending_load_register_] = pending_load_value_;
+    pending_load_valid_ = false;
+    pending_load_register_ = 0;
+    pending_load_value_ = 0;
     state_.gpr[0] = 0;
 }
 
@@ -33,6 +51,7 @@ CpuStepResult CpuCore::step() {
     result.instruction_pc = state_.pc;
 
     if ((state_.pc & 3u) != 0) {
+        commit_pending_load();
         cop0_.enter_exception(state_, CpuException::AddressLoad, state_.pc, in_delay_slot_, state_.pc);
         in_delay_slot_ = false;
         result.status = CpuStepStatus::ExceptionTaken;
@@ -49,6 +68,9 @@ CpuStepResult CpuCore::step() {
     const Instruction ins(raw);
     const auto rs = state_.gpr[ins.rs()];
     const auto rt = state_.gpr[ins.rt()];
+    // R3000A load delay: this instruction reads the old register values;
+    // the previous load becomes visible only after its operands are captured.
+    commit_pending_load();
     const auto imm = ins.signed_immediate();
     const auto uimm = static_cast<std::uint32_t>(ins.immediate());
     const auto pc = state_.pc;
@@ -231,7 +253,7 @@ CpuStepResult CpuCore::step() {
         if (bus_.read32(aligned, memory)) {
             const auto shift = (address & 3u) * 8u;
             const auto mask = 0x00FFFFFFu >> shift;
-            write_reg(ins.rt(), (rt & mask) | (memory << (24u - shift)));
+            schedule_load(ins.rt(), (rt & mask) | (memory << (24u - shift)));
         } else result.status = CpuStepStatus::BusFault;
         break;
     }
@@ -242,14 +264,14 @@ CpuStepResult CpuCore::step() {
         if (bus_.read32(aligned, memory)) {
             const auto shift = (address & 3u) * 8u;
             const auto mask = 0xFFFFFF00u << (24u - shift);
-            write_reg(ins.rt(), (rt & mask) | (memory >> shift));
+            schedule_load(ins.rt(), (rt & mask) | (memory >> shift));
         } else result.status = CpuStepStatus::BusFault;
         break;
     }
     case 0x20: { // LB
         std::uint8_t v = 0;
         if (bus_.read8(rs + static_cast<std::uint32_t>(imm), v))
-            write_reg(ins.rt(), sign_extend8(v));
+            schedule_load(ins.rt(), sign_extend8(v));
         else result.status = CpuStepStatus::BusFault;
         break;
     }
@@ -257,13 +279,13 @@ CpuStepResult CpuCore::step() {
         const auto a = rs + static_cast<std::uint32_t>(imm);
         std::uint16_t v = 0;
         if (a & 1u) raise_exception(CpuException::AddressLoad, a);
-        else if (bus_.read16(a, v)) write_reg(ins.rt(), sign_extend16(v));
+        else if (bus_.read16(a, v)) schedule_load(ins.rt(), sign_extend16(v));
         else result.status = CpuStepStatus::BusFault;
         break;
     }
-    case 0x23: { std::uint32_t v = 0; if (load_address(rs + static_cast<std::uint32_t>(imm), v)) write_reg(ins.rt(), v); break; } // LW
-    case 0x24: { std::uint8_t v = 0; if (bus_.read8(rs + static_cast<std::uint32_t>(imm), v)) write_reg(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LBU
-    case 0x25: { const auto a = rs + static_cast<std::uint32_t>(imm); std::uint16_t v = 0; if (a & 1u) raise_exception(CpuException::AddressLoad, a); else if (bus_.read16(a, v)) write_reg(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LHU
+    case 0x23: { std::uint32_t v = 0; if (load_address(rs + static_cast<std::uint32_t>(imm), v)) schedule_load(ins.rt(), v); break; } // LW
+    case 0x24: { std::uint8_t v = 0; if (bus_.read8(rs + static_cast<std::uint32_t>(imm), v)) schedule_load(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LBU
+    case 0x25: { const auto a = rs + static_cast<std::uint32_t>(imm); std::uint16_t v = 0; if (a & 1u) raise_exception(CpuException::AddressLoad, a); else if (bus_.read16(a, v)) schedule_load(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LHU
     case 0x2A: { // SWL — little-endian left word merge
         const auto address = rs + static_cast<std::uint32_t>(imm);
         const auto aligned = address & ~3u;
