@@ -11,6 +11,8 @@ void Ram::clear(std::uint8_t value) noexcept {
 }
 
 bool Ram::translate(std::uint32_t address, std::size_t& offset) const noexcept {
+    // KSEG2 (0xC0000000-0xFFFFFFFF) is not a direct-mapped region.
+    if (address >= 0xC0000000u) return false;
     const std::uint32_t physical = address & kPhysicalMask;
     if (physical >= kPhysicalWindowSize) return false;
 
