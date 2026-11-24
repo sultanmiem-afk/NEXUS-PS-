@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BiosRom.hpp"
+#include "Cdrom.hpp"
 #include "CpuCore.hpp"
 #include "DmaController.hpp"
 #include "InterruptController.hpp"
@@ -32,6 +33,8 @@ public:
     const Timer2& timer2() const noexcept { return timer2_; }
     InterruptController& interrupts() noexcept { return interrupts_; }
     const InterruptController& interrupts() const noexcept { return interrupts_; }
+    Cdrom& cdrom() noexcept { return cdrom_; }
+    const Cdrom& cdrom() const noexcept { return cdrom_; }
     BiosRom& bios() noexcept { return bios_; }
     const BiosRom& bios() const noexcept { return bios_; }
 
@@ -48,6 +51,7 @@ private:
     Ram ram_{};
     Scratchpad scratchpad_{};
     BiosRom bios_{};
+    Cdrom cdrom_{};
     DmaController dma_{};
     InterruptController interrupts_{};
     Timer0 timer0_{};
