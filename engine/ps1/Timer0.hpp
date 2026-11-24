@@ -19,6 +19,7 @@ public:
 
     // Returns true when this advance generates a Timer 0 IRQ event.
     bool advance(std::uint32_t cpuCycles) noexcept;
+    bool advanceDotClockPulses(std::uint32_t pulses) noexcept;
     bool read32(std::uint32_t address, std::uint32_t& value) const noexcept;
     bool write32(std::uint32_t address, std::uint32_t value) noexcept;
 
@@ -30,6 +31,8 @@ private:
     static constexpr std::uint32_t kIrqRepeat = 1u << 6;
     static constexpr std::uint32_t kIrqToggle = 1u << 7;
     static constexpr std::uint32_t kClockSourceMask = 3u << 8;
+
+    bool advanceTicks(std::uint32_t ticks) noexcept;
 
     std::uint16_t counter_ = 0;
     std::uint16_t target_ = 0;
