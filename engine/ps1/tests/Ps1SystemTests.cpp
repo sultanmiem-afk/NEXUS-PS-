@@ -59,6 +59,25 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::Executed);
     assert((system.cpu().cop0().read(Cop0::kCause) & (1u << 10)) == 0u);
 
+    // DMA channel 2 completion raises DICR master IRQ and latches I_STAT DMA.
+    system.reset(0x00000000u);
+    system.gpu().writeGp0(0xA0000000u);
+    system.gpu().writeGp0(0x00000000u);
+    system.gpu().writeGp0(0x00010002u);
+    assert(system.memory().ram().write32(0x100u, 0x22221111u));
+    assert(system.memory().write32(DmaController::kDpcrAddress, 1u << 11));
+    assert(system.memory().write32(DmaController::kDicrAddress, (1u << 23) | (1u << 18)));
+    assert(system.memory().write32(DmaController::kBaseAddress + 0x20u, 0x100u));
+    assert(system.memory().write32(DmaController::kBaseAddress + 0x24u, 1u));
+    assert(system.memory().write32(DmaController::kBaseAddress + 0x28u, 0x11000001u));
+    const auto dmaStep = system.step();
+    assert(dmaStep.dmaTransferred && dmaStep.dmaWords == 1u);
+    assert((system.memory().interrupts().status() & (1u << 3)) != 0u);
+    assert((system.memory().dma().dicr() & 0x80000000u) != 0u);
+    system.cpu().cop0().write(Cop0::kStatus, (1u << 0) | (1u << 10));
+    assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(system.cpu().state().pc == 0x80000080u);
+
     // BIOS loading validates exact image size and remains loaded across reset.
     std::vector<std::uint8_t> bios(BiosRom::kSize, 0);
     assert(system.loadBios(bios));
