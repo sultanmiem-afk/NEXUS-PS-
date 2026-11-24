@@ -76,6 +76,20 @@ int main() {
     assert(!ram.read32(0x807FFFFEu, word));
     assert(!ram.write32(0xA07FFFFEu, 0x12345678u));
 
+    // Deterministic stress pass across the full 2 MiB chip and its aliases.
+    // A fixed LCG seed keeps CI reproducible while exercising many offsets.
+    std::uint32_t random = 0xC001D00Du;
+    for (unsigned i = 0; i < 5000; ++i) {
+        random = random * 1664525u + 1013904223u;
+        const std::uint32_t offset = (random & 0x001FFFFCu);
+        const std::uint32_t value = random ^ (i * 0x9E3779B9u);
+        assert(ram.write32(offset, value));
+        std::uint32_t observed = 0;
+        const std::uint32_t alias = (i & 1u) ? 0x80000000u : 0xA0000000u;
+        assert(ram.read32(alias + offset, observed));
+        assert(observed == value);
+    }
+
     ram.clear(0x5Au);
     assert(ram.read8(0x100u, byte) && byte == 0x5Au);
     assert(ram.read32(0x100u, word) && word == 0x5A5A5A5Au);
