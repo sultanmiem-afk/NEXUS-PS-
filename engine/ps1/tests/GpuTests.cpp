@@ -350,6 +350,48 @@ int main() {
     assert(vram.readPixel(896u, 400u, pixel) && pixel == 0x001Fu);
     assert(gpu.serviceGp0Fifo(4u) == 0u);
 
+    // GPU FIFO pressure test: queue complete command packets, hit capacity,
+    // drain in uneven batches, wrap the ring, and verify execution order.
+    gpu.reset();
+    for (std::uint32_t round = 0; round < 100u; ++round) {
+        const std::uint32_t y = 200u + round;
+        const std::uint32_t colors[7] = {
+            0x000000FFu, 0x0000FF00u, 0x00FF0000u,
+            0x0000FFFFu, 0x00FFFF00u, 0x00FF00FFu, 0x00FFFFFFu
+        };
+        for (std::uint32_t i = 0; i < 5u; ++i) {
+            assert(gpu.enqueueGp0(0x02000000u | colors[i]));
+            assert(gpu.enqueueGp0((i * 16u) | (y << 16)));
+            assert(gpu.enqueueGp0(16u | (1u << 16)));
+        }
+        assert(gpu.enqueueGp0(0u)); // NOP fills the sixteenth FIFO slot.
+        assert(gpu.gp0FifoSize() == GpuFifo::kCapacity);
+        assert(!gpu.enqueueGp0(0x020000FFu));
+        assert((gpu.readStatus() & (1u << 26)) == 0u);
+
+        assert(gpu.serviceGp0Fifo(7u) == 7u);
+        for (std::uint32_t i = 5u; i < 7u; ++i) {
+            assert(gpu.enqueueGp0(0x02000000u | colors[i]));
+            assert(gpu.enqueueGp0((i * 16u) | (y << 16)));
+            assert(gpu.enqueueGp0(16u | (1u << 16)));
+        }
+        assert(gpu.gp0FifoSize() == 15u);
+        assert((gpu.readStatus() & (1u << 26)) != 0u);
+        assert(gpu.serviceGp0Fifo(5u) == 5u);
+        assert(gpu.serviceGp0Fifo(32u) == 10u);
+        assert(gpu.gp0FifoSize() == 0u);
+
+        for (std::uint32_t i = 0; i < 7u; ++i) {
+            assert(vram.readPixel(i * 16u, y, pixel));
+            assert(pixel == (i == 0u ? 0x001Fu :
+                             i == 1u ? 0x03E0u :
+                             i == 2u ? 0x7C00u :
+                             i == 3u ? 0x03FFu :
+                             i == 4u ? 0x7FE0u :
+                             i == 5u ? 0x7C1Fu : 0x7FFFu));
+        }
+    }
+
     // Bounded GP0 FIFO primitive: capacity, overflow, ordering and wraparound.
     GpuFifo fifo;
     assert(fifo.empty());
