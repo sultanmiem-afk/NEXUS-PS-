@@ -8,6 +8,7 @@ add_library(nexus_ps1_cpu
     Ram.cpp
     Scratchpad.cpp
     BiosRom.cpp
+    Cdrom.cpp
     Vram.cpp
     Gpu.cpp
     MemoryBus.cpp
@@ -63,6 +64,10 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_timer2_tests tests/Timer2Tests.cpp)
     target_link_libraries(nexus_ps1_timer2_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_timer2_tests COMMAND nexus_ps1_timer2_tests)
+
+    add_executable(nexus_ps1_cdrom_tests tests/CdromTests.cpp)
+    target_link_libraries(nexus_ps1_cdrom_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_cdrom_tests COMMAND nexus_ps1_cdrom_tests)
 
     add_executable(nexus_ps1_system_tests tests/Ps1SystemTests.cpp)
     target_link_libraries(nexus_ps1_system_tests PRIVATE nexus_ps1_cpu)
