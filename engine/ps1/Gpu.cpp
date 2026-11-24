@@ -85,6 +85,8 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
             return;
         }
         if (opcode == 0x02) expectedWords_ = 3;
+        else if (opcode == 0x20) expectedWords_ = 4;
+        else if (opcode == 0x28) expectedWords_ = 5;
         else if (opcode == 0xA0 || opcode == 0xC0) expectedWords_ = 3;
         else {
             ++unsupportedCommandCount_;
@@ -104,6 +106,8 @@ void Gpu::executePacket() {
     const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
     if (opcode == 0x02) {
         executeFillRectangle();
+    } else if (opcode == 0x20 || opcode == 0x28) {
+        executeFlatPolygon();
     } else if (opcode == 0xA0) {
         beginImageTransfer(TransferMode::CpuToVram);
     } else if (opcode == 0xC0) {
@@ -128,6 +132,71 @@ void Gpu::executeFillRectangle() noexcept {
             vram_.writePixel((x + col) % Vram::kWidth,
                              (rawY + row) % Vram::kHeight,
                              static_cast<std::uint16_t>(color));
+        }
+    }
+}
+
+
+namespace {
+int signExtend11(std::uint32_t value) noexcept {
+    value &= 0x7FFu;
+    return (value & 0x400u) ? static_cast<int>(value) - 0x800
+                            : static_cast<int>(value);
+}
+
+long long edgeFunction(int ax, int ay, int bx, int by,
+                       int px, int py) noexcept {
+    return static_cast<long long>(px - ax) * (by - ay) -
+           static_cast<long long>(py - ay) * (bx - ax);
+}
+} // namespace
+
+void Gpu::executeFlatPolygon() noexcept {
+    if (packet_.size() < 4) return;
+    const std::uint16_t color = static_cast<std::uint16_t>(color24To15(packet_[0]));
+    const int offsetX = signExtend11(drawOffset_ & 0x7FFu);
+    const int offsetY = signExtend11((drawOffset_ >> 11) & 0x7FFu);
+    int x[4]{};
+    int y[4]{};
+    const int vertices = packet_[0] >> 24 == 0x28 ? 4 : 3;
+    for (int i = 0; i < vertices; ++i) {
+        const std::uint32_t packed = packet_[static_cast<std::size_t>(i) + 1];
+        x[i] = signExtend11(packed) + offsetX;
+        y[i] = signExtend11(packed >> 16) + offsetY;
+    }
+    drawTriangle(x[0], y[0], x[1], y[1], x[2], y[2], color);
+    if (vertices == 4) {
+        drawTriangle(x[1], y[1], x[2], y[2], x[3], y[3], color);
+    }
+}
+
+void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
+                       int x2, int y2, std::uint16_t color) noexcept {
+    const long long area = edgeFunction(x0, y0, x1, y1, x2, y2);
+    if (area == 0) return;
+
+    const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
+    const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
+    const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
+    const int bottom = static_cast<int>((drawAreaBottomRight_ >> 10) & 0x1FFu);
+    const int minX = std::max({0, left, std::min({x0, x1, x2})});
+    const int minY = std::max({0, top, std::min({y0, y1, y2})});
+    const int maxX = std::min({static_cast<int>(Vram::kWidth) - 1, right,
+                               std::max({x0, x1, x2})});
+    const int maxY = std::min({static_cast<int>(Vram::kHeight) - 1, bottom,
+                               std::max({y0, y1, y2})});
+    if (minX > maxX || minY > maxY) return;
+
+    for (int py = minY; py <= maxY; ++py) {
+        for (int px = minX; px <= maxX; ++px) {
+            const long long e0 = edgeFunction(x0, y0, x1, y1, px, py);
+            const long long e1 = edgeFunction(x1, y1, x2, y2, px, py);
+            const long long e2 = edgeFunction(x2, y2, x0, y0, px, py);
+            const bool inside = area > 0
+                ? (e0 <= 0 && e1 <= 0 && e2 <= 0)
+                : (e0 >= 0 && e1 >= 0 && e2 >= 0);
+            if (inside) vram_.writePixel(static_cast<std::uint32_t>(px),
+                                         static_cast<std::uint32_t>(py), color);
         }
     }
 }
