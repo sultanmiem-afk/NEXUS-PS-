@@ -8,6 +8,7 @@ void MemoryBus::clear() noexcept {
     dma_.reset();
     interrupts_.reset();
     timer0_.reset();
+    timer1_.reset();
 }
 
 bool MemoryBus::read8(std::uint32_t address, std::uint8_t& value) {
@@ -28,6 +29,7 @@ bool MemoryBus::read32(std::uint32_t address, std::uint32_t& value) {
     if (dma_.read32(address, value)) return true;
     if (interrupts_.read32(address, value)) return true;
     if (timer0_.read32(address, value)) return true;
+    if (timer1_.read32(address, value)) return true;
     return bios_.read32(address, value);
 }
 
@@ -46,7 +48,8 @@ bool MemoryBus::write32(std::uint32_t address, std::uint32_t value) {
     if (scratchpad_.write32(address, value)) return true;
     if (dma_.write32(address, value)) return true;
     if (interrupts_.write32(address, value)) return true;
-    return timer0_.write32(address, value);
+    if (timer0_.write32(address, value)) return true;
+    return timer1_.write32(address, value);
 }
 
 } // namespace nexus::ps1
