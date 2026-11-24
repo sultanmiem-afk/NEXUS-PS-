@@ -65,6 +65,8 @@ private:
     void finishTransfer() noexcept;
     void executeFillRectangle() noexcept;
     void executeFlatPolygon() noexcept;
+    void executeFlatLine() noexcept;
+    void drawLine(int x0, int y0, int x1, int y1, std::uint16_t color) noexcept;
     void drawTriangle(int x0, int y0, int x1, int y1, int x2, int y2,
                       std::uint16_t color) noexcept;
     void executeEnvironmentCommand(std::uint32_t command) noexcept;
