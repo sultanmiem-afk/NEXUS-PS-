@@ -384,7 +384,7 @@ int main() {
     assert(dma.write32(DmaController::kDpcrAddress, 1u << 15)); // Enable channel 3.
     assert(dma.write32(DmaController::kDicrAddress, (1u << 23) | (1u << 19)));
     assert(dma.write32(DmaController::kBaseAddress + 0x30u, 0x600u));
-    assert(dma.write32(DmaController::kBaseAddress + 0x34u, 512u));
+    assert(dma.write32(DmaController::kBaseAddress + 0x34u, 0x00010200u));
     assert(dma.write32(DmaController::kBaseAddress + 0x38u, 0x01000200u)); // Request, device -> RAM.
     assert(dma.executeCdromTransfer(ram, cdrom));
     assert(dma.lastCdromTransferWords() == 512u);
