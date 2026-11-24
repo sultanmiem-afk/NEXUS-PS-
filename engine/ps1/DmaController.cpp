@@ -1,4 +1,7 @@
-#include "DmaController.hpp"\n\n#include "Gpu.hpp"\n#include "Ram.hpp"
+#include "DmaController.hpp"
+
+#include "Gpu.hpp"
+#include "Ram.hpp"
 
 namespace nexus::ps1 {
 
@@ -7,7 +10,8 @@ void DmaController::reset() noexcept {
     // PS1 power-on DPCR priorities/enables default to zero.
     dpcr_ = 0x07654321u;
     dicrControl_ = 0;
-    dicrFlags_ = 0;\n    lastTransferWords_ = 0;
+    dicrFlags_ = 0;
+    lastTransferWords_ = 0;
 }
 
 std::uint32_t DmaController::base(std::size_t channel) const noexcept {
