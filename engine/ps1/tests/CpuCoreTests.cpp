@@ -287,6 +287,50 @@ int main() {
         assert((cp0.read(Cop0::kStatus) & 0x3Fu) == 0x00000015u);
     }
 
+    // CPU-level COP0 transfers and RFE decode use their architectural encodings.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.cop0().write(Cop0::kStatus, 0x12345678u);
+        const std::uint32_t mfc0_status =
+            (0x10u << 26) | (0x00u << 21) | (5u << 16) | (Cop0::kStatus << 11);
+        put(bus, 0, mfc0_status);
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().gpr[5] == 0x12345678u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[6] = 0x00000015u;
+        const std::uint32_t mtc0_status =
+            (0x10u << 26) | (0x04u << 21) | (6u << 16) | (Cop0::kStatus << 11);
+        put(bus, 0, mtc0_status);
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.cop0().read(Cop0::kStatus) == 0x15u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.cop0().write(Cop0::kStatus, 0x15u);
+        put(bus, 0, 0x42000010u); // RFE
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.cop0().read(Cop0::kStatus) == 0x05u);
+    }
+    // Nonzero reserved fields in MFC0/MTC0/RFE encodings are RI exceptions.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        put(bus, 0, 0x40000001u); // MFC0 with a reserved low bit set
+        const auto result = cpu.step();
+        assert(result.status == CpuStepStatus::ExceptionTaken);
+        assert(((cpu.cop0().read(Cop0::kCause) >> 2) & 0x1Fu) ==
+               static_cast<std::uint32_t>(CpuException::ReservedInstruction));
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        put(bus, 0, 0x42010010u); // RFE with nonzero reserved rt field
+        const auto result = cpu.step();
+        assert(result.status == CpuStepStatus::ExceptionTaken);
+        assert(((cpu.cop0().read(Cop0::kCause) >> 2) & 0x1Fu) ==
+               static_cast<std::uint32_t>(CpuException::ReservedInstruction));
+    }
+
     // A syscall in a branch delay slot must report the branch PC and set Cause.BD.
     {
         TestBus bus; CpuCore cpu(bus); cpu.reset(0);
