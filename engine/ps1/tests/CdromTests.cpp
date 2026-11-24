@@ -157,6 +157,7 @@ int main() {
     commandCdrom.write8(0x1F801802u, 0x03u);
     commandCdrom.write8(0x1F801802u, 0x04u);
     commandCdrom.write8(0x1F801801u, 0x0Du); // Setfilter
+    assert(commandCdrom.read8(0x1F801801u, byte)); // discard Setfilter response
     commandCdrom.write8(0x1F801801u, 0x0Fu); // Getparam
     assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0u);
     assert(commandCdrom.read8(0x1F801801u, byte) && byte == 0u);
