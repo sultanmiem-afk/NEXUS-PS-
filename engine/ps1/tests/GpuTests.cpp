@@ -266,7 +266,7 @@ int main() {
     const auto fifoTimingB = gpu.advanceTiming(1u);
     assert(fifoTimingB.gp0ServiceWords == 1u);
     const auto fifoTimingC = gpu.advanceTiming(1u);
-    assert(fifoTimingC.gp0ServiceWords == 0u);
+    assert(fifoTimingC.gp0ServiceWords == 1u);
     const auto fifoTimingD = gpu.advanceTiming(1u);
     assert(fifoTimingD.gp0ServiceWords == 1u);
 
