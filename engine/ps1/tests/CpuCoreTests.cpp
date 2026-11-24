@@ -433,5 +433,56 @@ int main() {
         assert(cpu.state().gpr[4]==2u);
     }
 
+    // LWL merges the addressed left portion for every byte offset.
+    {
+        const std::uint32_t memoryWord=0x11223344u;
+        const std::uint32_t initial=0xAABBCCDDu;
+        const std::uint32_t expected[4]={
+            0x44BBCCDDu, 0x3344CCDDu, 0x223344DDu, 0x11223344u
+        };
+        for(unsigned offset=0;offset<4;++offset) {
+            TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+            cpu.state().gpr[1]=0x100u+offset; cpu.state().gpr[2]=initial;
+            assert(bus.write32(0x100u,memoryWord));
+            put(bus,0,i_type(0x22,1,2,0)); // LWL r2, 0(r1)
+            put(bus,4,0); // load delay
+            assert(cpu.step().status==CpuStepStatus::Executed);
+            assert(cpu.step().status==CpuStepStatus::Executed);
+            assert(cpu.state().gpr[2]==expected[offset]);
+        }
+    }
+    // LWR merges the addressed right portion for every byte offset.
+    {
+        const std::uint32_t memoryWord=0x11223344u;
+        const std::uint32_t initial=0xAABBCCDDu;
+        const std::uint32_t expected[4]={
+            0x11223344u, 0xAA112233u, 0xAABB1122u, 0xAABBCC11u
+        };
+        for(unsigned offset=0;offset<4;++offset) {
+            TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+            cpu.state().gpr[1]=0x100u+offset; cpu.state().gpr[2]=initial;
+            assert(bus.write32(0x100u,memoryWord));
+            put(bus,0,i_type(0x26,1,2,0)); // LWR r2, 0(r1)
+            put(bus,4,0); // load delay
+            assert(cpu.step().status==CpuStepStatus::Executed);
+            assert(cpu.step().status==CpuStepStatus::Executed);
+            assert(cpu.state().gpr[2]==expected[offset]);
+        }
+    }
+    // The conventional LWL/LWR pair must merge into one unaligned 32-bit word.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1]=0x101u; // unaligned word starts at byte 1
+        assert(bus.write32(0x100u,0x44332211u));
+        assert(bus.write32(0x104u,0x88776655u));
+        put(bus,0,i_type(0x22,1,2,3)); // LWL r2, 3(r1): byte 0x55 -> high byte
+        put(bus,4,i_type(0x26,1,2,0)); // LWR r2, 0(r1): low 3 bytes
+        put(bus,8,0);                  // normal load delay after pair
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.step().status==CpuStepStatus::Executed);
+        assert(cpu.state().gpr[2]==0x55443322u);
+    }
+
     return 0;
 }
