@@ -395,6 +395,50 @@ int main() {
     assert(ram.read32(0x600u, value) && value == 0x44332211u);
     assert(ram.read32(0x7FCu, value) && value == 0x44332211u);
 
+    // Channel 3 can make partial progress when only part of a sector is in the FIFO.
+    DmaController partialDma;
+    Cdrom partialCdrom;
+    std::vector<std::uint8_t> twoSectors(4096u, 0u);
+    for (std::size_t i = 0; i < twoSectors.size(); ++i)
+        twoSectors[i] = static_cast<std::uint8_t>((i / 2048u) == 0u ? 0x31u : 0x72u);
+    assert(partialCdrom.loadImage(twoSectors));
+    partialCdrom.write8(0x1F801800u, 0u);
+    partialCdrom.write8(0x1F801802u, 0x00u);
+    partialCdrom.write8(0x1F801802u, 0x02u);
+    partialCdrom.write8(0x1F801802u, 0x00u);
+    partialCdrom.write8(0x1F801801u, 0x02u);
+    partialCdrom.write8(0x1F801801u, 0x06u);
+    partialCdrom.advance(Cdrom::kCyclesPerSector);
+    // Consume 1536 bytes via the byte data port, leaving 128 DMA words available.
+    for (unsigned i = 0; i < 1536u; ++i) {
+        std::uint8_t discarded = 0u;
+        assert(partialCdrom.read8(0x1F801802u, discarded));
+    }
+    assert(partialCdrom.dataAvailableBytes() == 512u);
+    assert(partialDma.write32(DmaController::kDpcrAddress, 1u << 15));
+    assert(partialDma.write32(DmaController::kDicrAddress, (1u << 23) | (1u << 19)));
+    assert(partialDma.write32(DmaController::kBaseAddress + 0x30u, 0x3000u));
+    assert(partialDma.write32(DmaController::kBaseAddress + 0x34u, 0x00010200u));
+    assert(partialDma.write32(DmaController::kBaseAddress + 0x38u, 0x01000200u));
+    assert(partialDma.executeCdromTransfer(ram, partialCdrom));
+    assert(partialDma.lastCdromTransferWords() == 128u);
+    assert(partialDma.base(3) == 0x3200u);
+    assert(partialDma.blockControl(3) == 0x00010180u);
+    assert((partialDma.dicr() & (1u << 27)) == 0u);
+    assert((partialDma.channelControl(3) & (1u << 24)) != 0u);
+
+    // A later sector resumes the same block and only then signals completion.
+    partialCdrom.advance(Cdrom::kCyclesPerSector);
+    assert(partialCdrom.dataAvailableBytes() == 2048u);
+    assert(partialDma.executeCdromTransfer(ram, partialCdrom));
+    assert(partialDma.lastCdromTransferWords() == 384u);
+    assert(partialDma.base(3) == 0x3800u);
+    assert(partialDma.blockControl(3) == 0u);
+    assert((partialDma.dicr() & (1u << 27)) != 0u);
+    assert((partialDma.channelControl(3) & (1u << 24)) == 0u);
+    assert(ram.read32(0x3000u, value) && value == 0x31313131u);
+    assert(ram.read32(0x3200u, value) && value == 0x72727272u);
+
     dma.reset();
     assert(dma.read32(DmaController::kDpcrAddress, value) && value == 0x07654321u);
     assert(dma.read32(DmaController::kBaseAddress, value) && value == 0u);
