@@ -78,6 +78,9 @@ void Spu::applyKeyMask(std::uint32_t mask, bool keyOn) noexcept {
         voices_[i].keyedOn = keyOn;
         if (keyOn) {
             voices_[i].currentAdsrVolume = 0;
+            voices_[i].currentAddress = voices_[i].startAddress;
+            voices_[i].sampleIndex = 0;
+            voices_[i].adpcmBlockValid = false;
             adpcmHistory1_[i] = 0;
             adpcmHistory2_[i] = 0;
             (void)decodeVoiceBlock(i);
@@ -128,7 +131,7 @@ bool Spu::decodeAdpcmBlock(std::uint32_t ramAddress,
 
 bool Spu::decodeVoiceBlock(std::size_t index) noexcept {
     if (index >= kVoiceCount) return false;
-    const std::uint32_t address = static_cast<std::uint32_t>(voices_[index].startAddress) * 8u;
+    const std::uint32_t address = static_cast<std::uint32_t>(voices_[index].currentAddress) * 8u;
     bool end = false;
     bool repeat = false;
     if (!decodeAdpcmBlock(address, voiceSamples_[index], adpcmHistory1_[index],
@@ -146,6 +149,40 @@ bool Spu::voiceSamples(std::size_t index,
                        std::array<std::int16_t, 28>& samples) const noexcept {
     if (index >= kVoiceCount || !voices_[index].adpcmBlockValid) return false;
     samples = voiceSamples_[index];
+    return true;
+}
+
+bool Spu::nextVoiceSample(std::size_t index, std::int16_t& sample) noexcept {
+    if (index >= kVoiceCount) return false;
+    VoiceState& voice = voices_[index];
+    if (!voice.keyedOn || !voice.adpcmBlockValid) return false;
+
+    sample = voiceSamples_[index][voice.sampleIndex];
+    ++voice.sampleIndex;
+    if (voice.sampleIndex < 28u) return true;
+
+    voice.sampleIndex = 0;
+    if (voice.adpcmEnd) {
+        if (!voice.adpcmRepeat) {
+            voice.keyedOn = false;
+            voice.adpcmBlockValid = false;
+            return true; // The final sample of the block was delivered.
+        }
+        voice.currentAddress = voice.repeatAddress;
+    } else {
+        // Each sound-RAM ADPCM block is 16 bytes = two 8-byte address units.
+        if (voice.currentAddress > 0xFFFDu) {
+            voice.keyedOn = false;
+            voice.adpcmBlockValid = false;
+            return true;
+        }
+        voice.currentAddress = static_cast<std::uint16_t>(voice.currentAddress + 2u);
+    }
+
+    if (!decodeVoiceBlock(index)) {
+        voice.keyedOn = false;
+        voice.adpcmBlockValid = false;
+    }
     return true;
 }
 
