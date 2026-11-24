@@ -87,5 +87,50 @@ int main() {
     assert(rawCdrom.read8(0x1F801802u, byte));
     assert(byte == 0x5Au);
 
+    // CUE/BIN binding: two MODE1/2352 tracks in one BIN file.
+    std::vector<std::uint8_t> cueBin(154u * 2352u, 0u);
+    std::fill(cueBin.begin() + 150u * 2352u + 16u,
+              cueBin.begin() + 150u * 2352u + 16u + 2048u, 0xA1u);
+    std::fill(cueBin.begin() + 152u * 2352u + 16u,
+              cueBin.begin() + 152u * 2352u + 16u + 2048u, 0xB2u);
+    const std::string cue =
+        "FILE \"disc.bin\" BINARY\n"
+        "  TRACK 01 MODE1/2352\n"
+        "    INDEX 01 00:02:00\n"
+        "  TRACK 02 MODE1/2352\n"
+        "    INDEX 01 00:02:02\n";
+    Cdrom cueCdrom;
+    assert(cueCdrom.loadCue(cue, "disc.bin", cueBin));
+    assert(cueCdrom.cueLoaded());
+    assert(cueCdrom.trackCount() == 2u);
+    assert(cueCdrom.sectorCount() == 4u);
+    assert(!cueCdrom.loadCue(cue, "wrong-name.bin", cueBin));
+
+    // First CUE track begins at disc LBA 0 and uses MODE1's 16-byte header.
+    cueCdrom.write8(0x1F801800u, 0u);
+    cueCdrom.write8(0x1F801802u, 0x00u);
+    cueCdrom.write8(0x1F801802u, 0x02u);
+    cueCdrom.write8(0x1F801802u, 0x00u);
+    cueCdrom.write8(0x1F801801u, 0x02u); // Setloc
+    cueCdrom.write8(0x1F801801u, 0x06u); // ReadN
+    cueCdrom.advance(Cdrom::kCyclesPerSector);
+    assert(cueCdrom.read8(0x1F801802u, byte) && byte == 0xA1u);
+
+    // The next sector is the second track, also addressed by absolute disc LBA.
+    for (std::size_t i = 1; i < 2048u; ++i)
+        cueCdrom.read8(0x1F801802u, byte);
+    cueCdrom.advance(Cdrom::kCyclesPerSector);
+    assert(cueCdrom.read8(0x1F801802u, byte) && byte == 0xB2u);
+
+    // Reject unsupported multi-BIN CUE sheets rather than silently mis-mapping.
+    const std::string multiFileCue =
+        "FILE \"one.bin\" BINARY\n"
+        " TRACK 01 MODE1/2048\n"
+        " INDEX 01 00:02:00\n"
+        "FILE \"two.bin\" BINARY\n"
+        " TRACK 02 MODE1/2048\n"
+        " INDEX 01 00:00:00\n";
+    assert(!cueCdrom.loadCue(multiFileCue, "one.bin", image));
+
     return 0;
 }
