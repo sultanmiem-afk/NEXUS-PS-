@@ -193,8 +193,8 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
             const long long e1 = edgeFunction(x1, y1, x2, y2, px, py);
             const long long e2 = edgeFunction(x2, y2, x0, y0, px, py);
             const bool inside = area > 0
-                ? (e0 <= 0 && e1 <= 0 && e2 <= 0)
-                : (e0 >= 0 && e1 >= 0 && e2 >= 0);
+                ? (e0 >= 0 && e1 >= 0 && e2 >= 0)
+                : (e0 <= 0 && e1 <= 0 && e2 <= 0);
             if (inside) vram_.writePixel(static_cast<std::uint32_t>(px),
                                          static_cast<std::uint32_t>(py), color);
         }
