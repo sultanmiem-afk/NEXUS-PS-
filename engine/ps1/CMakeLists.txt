@@ -44,7 +44,7 @@ if(NEXUS_PS1_BUILD_TESTS)
     target_link_libraries(nexus_ps1_gpu_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_gpu_tests COMMAND nexus_ps1_gpu_tests)
 
-    add_executable(nexus_ps1_system_tests tests/Ps1SystemTests.cpp)
+    add_executable(nexus_ps1_interrupt_tests tests/InterruptControllerTests.cpp)\n    target_link_libraries(nexus_ps1_interrupt_tests PRIVATE nexus_ps1_cpu)\n    add_test(NAME nexus_ps1_interrupt_tests COMMAND nexus_ps1_interrupt_tests)\n\n    add_executable(nexus_ps1_system_tests tests/Ps1SystemTests.cpp)
     target_link_libraries(nexus_ps1_system_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_system_tests COMMAND nexus_ps1_system_tests)
 endif()
