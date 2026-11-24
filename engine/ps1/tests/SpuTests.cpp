@@ -51,5 +51,40 @@ int main() {
     spu.reset();
     assert(spu.readRam32(0x100u, word) && word == 0u);
 
+    // Documented 16-bit SPU register bank (offsets from 0x1F801C00).
+    std::uint16_t reg = 0xFFFFu;
+    assert(spu.readRegister16(0x000u, reg) && reg == 0u);
+    assert(spu.writeRegister16(0x000u, 0x1111u)); // Voice 0 VOLL
+    assert(spu.writeRegister16(0x010u, 0x2222u)); // Voice 1 VOLL
+    assert(spu.writeRegister16(0x170u, 0xABCDu)); // Voice 23 VOLL
+    assert(spu.readRegister16(0x000u, reg) && reg == 0x1111u);
+    assert(spu.readRegister16(0x010u, reg) && reg == 0x2222u);
+    assert(spu.readRegister16(0x170u, reg) && reg == 0xABCDu);
+
+    // Global volume, voice masks, transfer/control and reverb slots.
+    assert(spu.writeRegister16(0x180u, 0x1234u)); // Main volume left
+    assert(spu.readRegister16(0x180u, reg) && reg == 0x1234u);
+    assert(spu.writeRegister16(0x188u, 0x00F0u)); // Key-on low mask
+    assert(spu.readRegister16(0x188u, reg) && reg == 0x00F0u);
+    assert(spu.writeRegister16(0x1AAu, 0x0041u)); // SPU control
+    assert(spu.readRegister16(0x1AAu, reg) && reg == 0x0041u);
+    assert(spu.writeRegister16(0x1C0u, 0x0100u)); // Reverb configuration
+    assert(spu.readRegister16(0x1C0u, reg) && reg == 0x0100u);
+    assert(spu.writeRegister16(0x25Eu, 0x7FFFu)); // Voice 23 current volume slot
+    assert(spu.readRegister16(0x25Eu, reg) && reg == 0x7FFFu);
+
+    // Reserved holes, misaligned offsets and addresses outside the SPU map fail.
+    assert(!spu.readRegister16(0x1A0u, reg));
+    assert(!spu.writeRegister16(0x1A0u, 0x1234u));
+    assert(!spu.readRegister16(0x001u, reg));
+    assert(!spu.writeRegister16(0x201u, 0x1234u));
+    assert(!spu.readRegister16(0x260u, reg));
+    assert(!spu.writeRegister16(0x400u, 0x1234u));
+
+    // Reset clears register state as well as sound RAM.
+    spu.reset();
+    assert(spu.readRegister16(0x000u, reg) && reg == 0u);
+    assert(spu.readRegister16(0x180u, reg) && reg == 0u);
+
     return 0;
 }
