@@ -69,7 +69,7 @@ private:
     void executeTexturedPolygon() noexcept;
     void drawTexturedTriangle(const int x[3], const int y[3],
                               const int u[3], const int v[3],
-                              std::uint16_t page) noexcept;
+                              std::uint16_t page, bool rawTexture, bool semiTransparent) noexcept;
     void executeFlatLine() noexcept;
     void drawLine(int x0, int y0, int x1, int y1, std::uint16_t color) noexcept;
     void drawTriangle(int x0, int y0, int x1, int y1, int x2, int y2,
