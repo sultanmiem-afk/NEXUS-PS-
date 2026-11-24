@@ -61,6 +61,10 @@ SystemStepResult Ps1System::step() {
         memory_.interrupts().request(1u << 6); // I_STAT Timer 2 source
     if (memory_.cdrom().irqPending())
         memory_.interrupts().request(1u << 2); // I_STAT CD-ROM source
+    result.cdromDmaTransferred = memory_.dma().executeCdromTransfer(
+        memory_.ram(), memory_.cdrom());
+    if (result.cdromDmaTransferred)
+        result.cdromDmaWords = memory_.dma().lastCdromTransferWords();
     result.dmaTransferred = memory_.dma().executeGpuTransfer(memory_.ram(), gpu_);
     if (result.dmaTransferred)
         result.dmaWords = memory_.dma().lastTransferWords();
