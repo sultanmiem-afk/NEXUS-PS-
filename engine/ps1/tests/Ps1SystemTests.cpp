@@ -65,6 +65,7 @@ int main() {
     system.gpu().writeGp0(0x00000000u);
     system.gpu().writeGp0(0x00010002u);
     assert(system.memory().ram().write32(0x100u, 0x22221111u));
+    assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 3));
     assert(system.memory().write32(DmaController::kDpcrAddress, 1u << 11));
     assert(system.memory().write32(DmaController::kDicrAddress, (1u << 23) | (1u << 18)));
     assert(system.memory().write32(DmaController::kBaseAddress + 0x20u, 0x100u));
