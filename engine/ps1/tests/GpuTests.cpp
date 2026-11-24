@@ -548,5 +548,65 @@ int main() {
     gpu.writeGp0(1u | (1u << 16u));
     assert(vram.readPixel(970u, 450u, pixel) && pixel == 0x001Fu);
 
+    // Flat polyline renders every segment; A0000000 is XY payload, not a transfer.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10));
+    gpu.writeGp0(0x480000FFu);
+    gpu.writeGp0(0xA0000000u); // First vertex at (0,0).
+    gpu.writeGp0(10u | (10u << 16));
+    gpu.writeGp0(20u | (10u << 16));
+    gpu.writeGp0(0x55555555u);
+    assert(vram.readPixel(5u, 5u, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(15u, 10u, pixel) && pixel == 0x001Fu);
+    // A following command must start cleanly after the variable-length packet.
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(950u | (450u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(950u, 450u, pixel) && pixel == 0x001Fu);
+
+    // Flat polyline accepts the full 5xxx5xxx terminator family.
+    gpu.writeGp0(0x4800FF00u);
+    gpu.writeGp0(100u | (100u << 16));
+    gpu.writeGp0(110u | (100u << 16));
+    gpu.writeGp0(0x51235123u);
+    assert(vram.readPixel(105u, 100u, pixel) && pixel == 0x03E0u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(940u | (450u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(940u, 450u, pixel) && pixel == 0x001Fu);
+
+    // Gouraud polyline draws color-interpolated segments and tolerates poison words.
+    gpu.writeGp0(0x580000FFu); // Red at vertex 0.
+    gpu.writeGp0(200u | (100u << 16));
+    gpu.writeGp0(0xA0000000u); // Black vertex color; must not start image transfer.
+    gpu.writeGp0(210u | (100u << 16));
+    gpu.writeGp0(0x0000FF00u); // Green vertex color.
+    gpu.writeGp0(220u | (100u << 16));
+    gpu.writeGp0(0x55555555u); // XY terminator.
+    assert(vram.readPixel(200u, 100u, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(210u, 100u, pixel) && pixel == 0x0000u);
+    assert(vram.readPixel(220u, 100u, pixel) && pixel == 0x03E0u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(930u | (450u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(930u, 450u, pixel) && pixel == 0x001Fu);
+
+    // Gouraud mirror opcode 0x5A and alternate 5xxx5xxx terminator.
+    gpu.writeGp0(0x5A0000FFu);
+    gpu.writeGp0(230u | (100u << 16));
+    gpu.writeGp0(0x0000FF00u);
+    gpu.writeGp0(240u | (100u << 16));
+    gpu.writeGp0(0x00FF0000u);
+    gpu.writeGp0(250u | (100u << 16));
+    gpu.writeGp0(0x52345234u);
+    assert(vram.readPixel(230u, 100u, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(240u, 100u, pixel) && pixel != 0x001Fu);
+    assert(vram.readPixel(250u, 100u, pixel) && pixel == 0x7C00u);
+    gpu.writeGp0(0x020000FFu);
+    gpu.writeGp0(920u | (450u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(920u, 450u, pixel) && pixel == 0x001Fu);
+
     return 0;
 }
