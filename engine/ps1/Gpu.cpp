@@ -800,20 +800,43 @@ void Gpu::writeGp1(std::uint32_t value) noexcept {
         case 0x05: displayStart_ = data & 0x0007FFFFu; break;
         case 0x06: horizontalRange_ = data; break;
         case 0x07: verticalRange_ = data; break;
-        case 0x08: displayMode_ = data & 0x3Fu; break;
+        case 0x08: displayMode_ = data & 0xFFu; break;
         default: break;
     }
 }
 
 std::uint32_t Gpu::readStatus() const noexcept {
-    std::uint32_t status = 0x14002000u;
-    status |= (displayDisabled_ ? 1u : 0u) << 23;
-    status |= (dmaDirection_ & 3u) << 29;
-    if (transferMode_ == TransferMode::None) status |= 1u << 26;
-    if (transferMode_ != TransferMode::CpuToVram) status |= 1u << 28;
-    if (transferMode_ == TransferMode::None) status |= 1u << 27;
+    std::uint32_t status = 0;
+
+    // Drawing environment and display-mode fields.
+    status |= drawMode_ & 0x7FFu;                 // bits 0-10
+    status |= (maskSetting_ & 3u) << 11;          // bits 11-12
+    status |= 1u << 13;                           // non-interlaced field default
+    if (displayMode_ & (1u << 7)) status |= 1u << 14;
+    status |= (drawMode_ & (1u << 11)) << 4;      // texture disable -> bit 15
+    status |= (displayMode_ & 0x7Fu) << 16;        // bits 16-22
+    if (displayDisabled_) status |= 1u << 23;
     if (irqPending_) status |= 1u << 24;
-    status |= (displayMode_ & 0x3Fu) << 0;
+
+    // This core has no hardware FIFO yet. Commands are consumed synchronously;
+    // an incomplete packet or active image transfer blocks a new command.
+    const bool idleForCommand =
+        packet_.empty() && transferMode_ == TransferMode::None;
+    const bool readyToSendVram = transferMode_ == TransferMode::VramToCpu;
+    const bool readyForDmaBlock = idleForCommand;
+
+    if (dmaDirection_ == 1u) {
+        status |= 1u << 25; // FIFO mode: modeled write FIFO is never full.
+    } else if (dmaDirection_ == 2u && readyForDmaBlock) {
+        status |= 1u << 25;
+    } else if (dmaDirection_ == 3u && readyToSendVram) {
+        status |= 1u << 25;
+    }
+
+    if (idleForCommand) status |= 1u << 26;
+    if (readyToSendVram) status |= 1u << 27;
+    if (readyForDmaBlock) status |= 1u << 28;
+    status |= (dmaDirection_ & 3u) << 29;
     return status;
 }
 
