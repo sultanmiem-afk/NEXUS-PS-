@@ -5,6 +5,7 @@ add_library(nexus_ps1_cpu
     CpuState.cpp
     CpuCore.cpp
     Cop0.cpp
+    Ram.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(nexus_ps1_cpu PUBLIC cxx_std_17)
@@ -15,4 +16,8 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_cpu_tests tests/CpuCoreTests.cpp)
     target_link_libraries(nexus_ps1_cpu_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_cpu_tests COMMAND nexus_ps1_cpu_tests)
+
+    add_executable(nexus_ps1_ram_tests tests/RamTests.cpp)
+    target_link_libraries(nexus_ps1_ram_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_ram_tests COMMAND nexus_ps1_ram_tests)
 endif()
