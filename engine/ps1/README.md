@@ -58,3 +58,8 @@ Added experimental GP0(24h) textured triangle and GP0(2Ch) textured quad handlin
 ### Indexed texture/CLUT support (experimental)
 
 Extended textured triangle/quad sampling to indexed 4-bit and 8-bit texture pages. The sampler extracts packed indices from VRAM words and resolves them through the packet CLUT coordinates; zero texels remain transparent. Added focused 4-bit and 8-bit CLUT tests. Perspective correction, texture modulation, semi-transparency, dithering, exact hardware edge rules, and timing remain unimplemented.
+
+
+### Texture modulation and raw texture mode (experimental)
+
+Added textured triangle/quad opcode variants GP0(24h/25h) and GP0(2Ch/2Dh). Modulated variants multiply sampled 5-bit RGB texture channels by the packet vertex RGB color using a neutral 128 scale; raw variants bypass modulation. CLUT test fixtures were corrected to seed the actual page/CLUT coordinates used by their packets. Semi-transparency, dithering, exact fixed-point behavior, and hardware rasterization rules remain incomplete.
