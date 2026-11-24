@@ -122,7 +122,7 @@ void Gpu::executeFillRectangle() noexcept {
     // GP0(02h) fill rectangles align the starting X down to 16 pixels and
     // round width up to a 16-pixel boundary. Coordinates wrap in VRAM.
     const std::uint32_t x = rawX & ~15u;
-    const std::uint32_t alignedWidth = (width + (rawX & 15u) + 15u) & ~15u;
+    const std::uint32_t alignedWidth = (width + 15u) & ~15u;
     for (std::uint32_t row = 0; row < height; ++row) {
         for (std::uint32_t col = 0; col < alignedWidth; ++col) {
             vram_.writePixel((x + col) % Vram::kWidth,
