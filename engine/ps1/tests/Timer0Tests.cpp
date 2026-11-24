@@ -42,6 +42,15 @@ int main() {
     assert(!timer.advance(10u));
     assert(timer.counter() == 0u);
 
+    // Dot-clock source advances only from GPU-provided pulses.
+    assert(timer.write32(Timer0::kTargetAddress, 2u));
+    assert(timer.write32(Timer0::kModeAddress, (1u << 8) | (1u << 4)));
+    assert(!timer.advance(100u));
+    assert(timer.counter() == 0u);
+    assert(!timer.advanceDotClockPulses(1u));
+    assert(timer.advanceDotClockPulses(1u));
+    assert(timer.counter() == 2u);
+
     assert(!timer.read32(0x1F80110Cu, value));
     return 0;
 }
