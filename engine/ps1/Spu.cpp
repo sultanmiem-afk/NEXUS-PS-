@@ -1,5 +1,20 @@
 #include "Spu.hpp"
 
+#include <algorithm>
+
+namespace {
+constexpr std::uint16_t kAdsrMaximum = 0x7FFFu;
+
+std::uint32_t ratePeriod(unsigned rate) noexcept {
+    rate = std::min(rate, 127u);
+    return 1u + ((127u - rate) / 16u);
+}
+
+std::uint32_t rateStep(unsigned rate) noexcept {
+    return 1u + (std::min(rate, 127u) / 8u);
+}
+} // namespace
+
 namespace nexus::ps1 {
 
 void Spu::reset() noexcept {
@@ -9,6 +24,7 @@ void Spu::reset() noexcept {
     for (auto& samples : voiceSamples_) samples.fill(0);
     adpcmHistory1_.fill(0);
     adpcmHistory2_.fill(0);
+    adsrRateCounters_.fill(0);
     keyOnMask_ = 0;
     keyOffMask_ = 0;
 }
@@ -75,15 +91,24 @@ void Spu::applyKeyMask(std::uint32_t mask, bool keyOn) noexcept {
     mask &= 0x00FFFFFFu;
     for (std::size_t i = 0; i < kVoiceCount; ++i) {
         if ((mask & (1u << i)) == 0) continue;
-        voices_[i].keyedOn = keyOn;
         if (keyOn) {
+            voices_[i].keyedOn = true;
             voices_[i].currentAdsrVolume = 0;
+            voices_[i].adsrPhase = AdsrPhase::Attack;
+            adsrRateCounters_[i] = 0;
             voices_[i].currentAddress = voices_[i].startAddress;
             voices_[i].sampleIndex = 0;
             voices_[i].adpcmBlockValid = false;
             adpcmHistory1_[i] = 0;
             adpcmHistory2_[i] = 0;
             (void)decodeVoiceBlock(i);
+        } else if (voices_[i].adsrPhase != AdsrPhase::Off) {
+            // Key-off closes the gate; the envelope continues through Release.
+            voices_[i].keyedOn = false;
+            voices_[i].adsrPhase = AdsrPhase::Release;
+            adsrRateCounters_[i] = 0;
+        } else {
+            voices_[i].keyedOn = false;
         }
     }
 }
@@ -155,7 +180,7 @@ bool Spu::voiceSamples(std::size_t index,
 bool Spu::nextVoiceSample(std::size_t index, std::int16_t& sample) noexcept {
     if (index >= kVoiceCount) return false;
     VoiceState& voice = voices_[index];
-    if (!voice.keyedOn || !voice.adpcmBlockValid) return false;
+    if (voice.adsrPhase == AdsrPhase::Off || !voice.adpcmBlockValid) return false;
 
     sample = voiceSamples_[index][voice.sampleIndex];
     ++voice.sampleIndex;
@@ -184,6 +209,103 @@ bool Spu::nextVoiceSample(std::size_t index, std::int16_t& sample) noexcept {
         voice.adpcmBlockValid = false;
     }
     return true;
+}
+
+void Spu::updateAdsrPhase(std::size_t index) noexcept {
+    VoiceState& voice = voices_[index];
+    if (voice.currentAdsrVolume == 0u) {
+        voice.adsrPhase = AdsrPhase::Off;
+        voice.adpcmBlockValid = false;
+    }
+}
+
+bool Spu::advanceAdsr(std::size_t index, std::uint32_t sampleTicks) noexcept {
+    if (index >= kVoiceCount) return false;
+    VoiceState& voice = voices_[index];
+    if (voice.adsrPhase == AdsrPhase::Off) return false;
+
+    for (std::uint32_t tick = 0; tick < sampleTicks; ++tick) {
+        unsigned rate = 0;
+        bool exponential = false;
+        switch (voice.adsrPhase) {
+            case AdsrPhase::Attack:
+                rate = (voice.adsrLow >> 8u) & 0x7Fu;
+                exponential = (voice.adsrLow & 0x8000u) != 0;
+                break;
+            case AdsrPhase::Decay:
+                rate = ((voice.adsrLow >> 4u) & 0x0Fu) * 8u;
+                exponential = true;
+                break;
+            case AdsrPhase::Sustain:
+                rate = (voice.adsrHigh >> 6u) & 0x7Fu;
+                exponential = (voice.adsrHigh & 0x8000u) != 0;
+                break;
+            case AdsrPhase::Release:
+                rate = (voice.adsrHigh & 0x1Fu) * 4u;
+                exponential = (voice.adsrHigh & 0x20u) != 0;
+                break;
+            case AdsrPhase::Off:
+                return false;
+        }
+
+        const std::uint32_t period = ratePeriod(rate);
+        if (++adsrRateCounters_[index] < period) continue;
+        adsrRateCounters_[index] = 0;
+
+        std::uint32_t step = rateStep(rate);
+        if (exponential) {
+            if (voice.adsrPhase == AdsrPhase::Attack &&
+                voice.currentAdsrVolume >= 0x6000u) {
+                step = std::max(1u, step / 4u);
+            } else if (voice.adsrPhase != AdsrPhase::Attack) {
+                step = std::max(1u, (static_cast<std::uint32_t>(voice.currentAdsrVolume) * step) >> 15u);
+            }
+        }
+
+        std::uint32_t level = voice.currentAdsrVolume;
+        switch (voice.adsrPhase) {
+            case AdsrPhase::Attack:
+                level = std::min<std::uint32_t>(kAdsrMaximum, level + step);
+                voice.currentAdsrVolume = static_cast<std::uint16_t>(level);
+                if (level == kAdsrMaximum) {
+                    voice.adsrPhase = AdsrPhase::Decay;
+                    adsrRateCounters_[index] = 0;
+                }
+                break;
+            case AdsrPhase::Decay: {
+                const std::uint32_t sustain = (((voice.adsrLow & 0x0Fu) + 1u) * 0x800u);
+                level = level > step ? level - step : 0u;
+                if (level <= sustain) {
+                    level = sustain;
+                    voice.adsrPhase = AdsrPhase::Sustain;
+                    adsrRateCounters_[index] = 0;
+                }
+                voice.currentAdsrVolume = static_cast<std::uint16_t>(level);
+                break;
+            }
+            case AdsrPhase::Sustain:
+                if ((voice.adsrHigh & 0x4000u) != 0) {
+                    level = level > step ? level - step : 0u;
+                } else {
+                    level = std::min<std::uint32_t>(kAdsrMaximum, level + step);
+                }
+                voice.currentAdsrVolume = static_cast<std::uint16_t>(level);
+                if (level == 0u) updateAdsrPhase(index);
+                break;
+            case AdsrPhase::Release:
+                level = level > step ? level - step : 0u;
+                voice.currentAdsrVolume = static_cast<std::uint16_t>(level);
+                if (level == 0u) {
+                    voice.adsrPhase = AdsrPhase::Off;
+                    voice.adpcmBlockValid = false;
+                    adsrRateCounters_[index] = 0;
+                }
+                break;
+            case AdsrPhase::Off:
+                return false;
+        }
+    }
+    return voice.adsrPhase != AdsrPhase::Off;
 }
 
 bool Spu::readRegister16(std::uint32_t offset, std::uint16_t& value) const noexcept {
