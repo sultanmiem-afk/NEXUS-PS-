@@ -1,47 +1,39 @@
-# NEXUS PS — CPU core
+# NEXUS PS — PS1 CPU and memory foundation
 
 The PlayStation uses a MIPS R3000A-compatible CPU. This directory contains
-an early portable interpreter and CP0 foundation.
+an early portable interpreter and the initial memory-device foundation.
 
 ## Implemented so far
 
-- 32 general-purpose registers with register zero hard-wired to zero.
-- HI/LO registers and PC/next-PC state.
-- MIPS instruction field decoder and reset-vector initialization.
-- Bus interface for the future PS1 memory subsystem.
-- 2 MiB main RAM device with little-endian byte/halfword/word access.\n- Separate 1 KiB CPU scratchpad mapped at physical address `0x1F800000`.\n- Initial CPU memory bus connecting RAM mirrors and scratchpad, with explicit faults for unmapped BIOS/MMIO regions.
-- RAM address decoding for the 8 MiB physical mirror window and KSEG0/KSEG1 aliases.
-- RAM clear/reset support and separate-device rejection for scratchpad/BIOS addresses.
-- Integer shifts, arithmetic/logical operations, comparisons, multiply/divide,
-  jumps, immediate operations, and byte/halfword/word memory access.
-- Conditional branches including BEQ, BNE, BLEZ, BGTZ, BLTZ, and BGEZ.
-- Branch-delay sequencing for ordinary branches and jumps.
-- R3000A one-instruction load delay using a pending-load writeback slot; loads
-  (including LWL/LWR) become visible after the following instruction reads its operands.
-- Little-endian LWL, LWR, SWL, and SWR word-merge instructions.
-- CP0 register file with Status, Cause, EPC, and BadVaddr access.
-- MFC0, MTC0, and RFE instruction handling.
-- Initial exception entry for syscall, breakpoint, reserved instruction,
-  arithmetic overflow, and misaligned instruction/data addresses.
-- Initial CMake build target and unit tests for arithmetic, branch delay, load-delay hazards, and RAM mapping/access, scratchpad mapping, and memory-bus routing.
-- GitHub Actions workflow to compile the CPU target and run its tests.
+- 32 general-purpose registers, HI/LO, PC state, and instruction decoding.
+- Partial R3000A integer interpreter, branch-delay handling, and load-delay handling.
+- Initial CP0 register and exception foundation.
+- 2 MiB main RAM with the 8 MiB physical mirror window and KSEG aliases.
+- Separate 1 KiB CPU scratchpad at physical address `0x1F800000`.
+- Read-only BIOS ROM device with the 512 KiB address window at `0x1FC00000`.
+  The user must supply a BIOS image; no BIOS image is included.
+- 1 MiB VRAM storage (1024 × 512 × 16-bit) with pixel and rectangular transfer
+  helpers. VRAM is intentionally separate from the CPU memory bus because the
+  original console accesses it through the GPU command/transfer path.
+- MemoryBus routes CPU reads/writes to RAM and scratchpad, and routes BIOS reads
+  to the read-only BIOS device. Unimplemented I/O regions fail explicitly.
+- CMake test targets for CPU, RAM, memory bus, BIOS, and VRAM foundations.
 
 ## Important accuracy limits
 
-This is not a complete or cycle-accurate R3000A implementation yet.
-Load-delay behavior, interrupt delivery and prioritization, all exception
-corner cases, precise bus-error handling, coprocessor 2/GTE operations,
-hardware timing, and some implementation-specific CPU behavior still need
-work. Current cycle counts are rough estimates, not a hardware timing model.
-The current unit tests are only a small initial test set.
+This is not a complete or cycle-accurate PlayStation emulator. The GPU command
+processor and its GP0/GP1 registers, CD-ROM controller, DMA, timers, interrupts,
+SPU/audio, controller ports, and full hardware timing are not implemented.
+VRAM storage alone does not render graphics or execute GPU commands. The CPU
+interpreter and memory map also need broader hardware validation.
 
 ## Next milestones
 
-1. Expand load-delay tests across every load opcode, including LWL/LWR and load-to-zero.
-2. Validate exception and branch-delay edge cases.
-3. Add the memory bus, then connect RAM, BIOS, scratchpad, and memory-mapped I/O to the CPU.
-4. Add interrupt/timer/DMA interactions and improve timing accuracy.
-5. Profile on Android before considering a dynamic recompiler.
+1. Implement GPU command ports and connect them to VRAM.
+2. Add MMIO register decoding, DMA, timers, and interrupt controller.
+3. Add CD-ROM image handling and SPU foundations.
+4. Connect the BIOS boot path to the CPU and validate with legally obtained
+   BIOS files and user-provided game images.
+5. Expand automated tests and profile on Android.
 
-No BIOS or game images are included. This CPU foundation cannot boot games
-until the rest of the PlayStation hardware is implemented.
+No BIOS or game images are included.
