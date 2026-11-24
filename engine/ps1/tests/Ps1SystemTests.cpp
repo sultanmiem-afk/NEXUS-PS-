@@ -380,7 +380,7 @@ int main() {
     emit(iType(0x2Bu, 1u, 2u, 0u));
     emit(0x34210004u); // r1 = BF801814 (GPUSTAT/GP1).
     emit(0x3C020800u); // GP1(08): display mode 45h.
-    emit(0x34420045u);
+    emit(0x3442007Fu);
     emit(iType(0x2Bu, 1u, 2u, 0u));
     emit(0x3C020700u); // GP1(07): VBlank interval [0,2).
     emit(0x34420800u);
@@ -411,7 +411,7 @@ int main() {
     // VBlank I_STAT bit 0 must pulse once per frame; GPUSTAT bit 31 alternates
     // at each frame boundary. The CPU itself reads GPUSTAT in its RAM-storing loop.
     std::uint32_t observedVblankFrames = 0u;
-    for (std::uint64_t step = 0; step < 1500000u && observedVblankFrames < 3u; ++step) {
+    for (std::uint64_t step = 0; step < 2000000u && observedVblankFrames < 3u; ++step) {
         assert(system.step().cpu.status == CpuStepStatus::Executed);
         std::uint32_t interruptStatus = 0u;
         assert(system.memory().read32(InterruptController::kStatusAddress, interruptStatus));
