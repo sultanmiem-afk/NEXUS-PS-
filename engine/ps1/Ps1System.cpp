@@ -4,6 +4,10 @@ namespace nexus::ps1 {
 namespace {
 constexpr std::uint32_t kGpuGp0 = 0x1F801810u;
 constexpr std::uint32_t kGpuGp1 = 0x1F801814u;
+std::uint32_t normalizeKseg1(std::uint32_t address) noexcept {
+    return (address >= 0xA0000000u && address < 0xC0000000u)
+        ? (address & 0x1FFFFFFFu) : address;
+}
 }
 
 Ps1System::Ps1System() noexcept
@@ -84,28 +88,34 @@ SystemStepResult Ps1System::step() {
 }
 
 bool Ps1System::SystemBus::read8(std::uint32_t address, std::uint8_t& value) {
+    address = normalizeKseg1(address);
     return memory_.read8(address, value);
 }
 
 bool Ps1System::SystemBus::read16(std::uint32_t address, std::uint16_t& value) {
+    address = normalizeKseg1(address);
     return memory_.read16(address, value);
 }
 
 bool Ps1System::SystemBus::read32(std::uint32_t address, std::uint32_t& value) {
+    address = normalizeKseg1(address);
     if (address == kGpuGp0) { value = gpu_.readGp0(); return true; }
     if (address == kGpuGp1) { value = gpu_.readStatus(); return true; }
     return memory_.read32(address, value);
 }
 
 bool Ps1System::SystemBus::write8(std::uint32_t address, std::uint8_t value) {
+    address = normalizeKseg1(address);
     return memory_.write8(address, value);
 }
 
 bool Ps1System::SystemBus::write16(std::uint32_t address, std::uint16_t value) {
+    address = normalizeKseg1(address);
     return memory_.write16(address, value);
 }
 
 bool Ps1System::SystemBus::write32(std::uint32_t address, std::uint32_t value) {
+    address = normalizeKseg1(address);
     if (address == kGpuGp0) return gpu_.enqueueGp0(value);
     if (address == kGpuGp1) { gpu_.writeGp1(value); return true; }
     return memory_.write32(address, value);
