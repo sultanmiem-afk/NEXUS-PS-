@@ -591,7 +591,9 @@ int main() {
     gpu.writeGp0(1u | (1u << 16));
     assert(vram.readPixel(930u, 450u, pixel) && pixel == 0x001Fu);
 
-    // Gouraud mirror opcode 0x5A and alternate 5xxx5xxx terminator.
+    // Gouraud semi-transparent mirror opcode 0x5A and alternate terminator.
+    vram.writePixel(230u, 100u, 0x001Fu);
+    vram.writePixel(240u, 100u, 0x001Fu);
     gpu.writeGp0(0x5A0000FFu);
     gpu.writeGp0(230u | (100u << 16));
     gpu.writeGp0(0x0000FF00u);
@@ -599,8 +601,8 @@ int main() {
     gpu.writeGp0(0x00FF0000u); // Unused next-vertex color before terminator.
     gpu.writeGp0(0x52345234u);
     assert(vram.readPixel(230u, 100u, pixel) && pixel == 0x001Fu);
-    assert(vram.readPixel(240u, 100u, pixel) && pixel == 0x03E0u);
-    assert(vram.readPixel(235u, 100u, pixel) && pixel != 0x001Fu && pixel != 0x03E0u);
+    assert(vram.readPixel(240u, 100u, pixel) && pixel == 0x01EFu);
+    assert(vram.readPixel(235u, 100u, pixel) && pixel != 0x001Fu && pixel != 0x01EFu);
     gpu.writeGp0(0x020000FFu);
     gpu.writeGp0(920u | (450u << 16));
     gpu.writeGp0(1u | (1u << 16));
