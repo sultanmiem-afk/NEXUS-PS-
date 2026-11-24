@@ -59,6 +59,15 @@ void Cop0::setHardwareInterruptPending(bool pending) noexcept {
     else regs_[kCause] &= ~hardwareInterruptBit;
 }
 
+bool Cop0::interruptPending() const noexcept {
+    const auto status = regs_[kStatus];
+    const auto cause = regs_[kCause];
+    constexpr std::uint32_t globalEnable = 1u;
+    constexpr std::uint32_t interruptMasks = 0x0000FF00u;
+    return (status & globalEnable) != 0u &&
+           (status & cause & interruptMasks) != 0u;
+}
+
 void Cop0::return_from_exception() noexcept {
     auto& status = regs_[kStatus];
     status = (status & ~0x0Fu) | ((status >> 2) & 0x0Fu);
