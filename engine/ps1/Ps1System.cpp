@@ -26,12 +26,15 @@ SystemStepResult Ps1System::step() {
     SystemStepResult result{};
     cpu_.cop0().setHardwareInterruptPending(memory_.interrupts().active());
     result.cpu = cpu_.step();
+    // Advance the GPU timing domain first so timers observe current blanking state.
+    const GpuTimingEvents gpuTiming = gpu_.advanceTiming(result.cpu.cycles);
+    memory_.timer0().setHBlankActive(gpuTiming.hBlankActive);
+    memory_.timer1().setVBlankActive(gpuTiming.vBlankActive);
     result.timer0Irq = memory_.timer0().advance(result.cpu.cycles);
     result.timer1Irq = memory_.timer1().advance(result.cpu.cycles);
     result.timer2Irq = memory_.timer2().advance(result.cpu.cycles);
 
-    // GPU timing emits dot-clock and HBlank events for the two GPU-clocked timers.
-    const GpuTimingEvents gpuTiming = gpu_.advanceTiming(result.cpu.cycles);
+    // Feed GPU dot-clock and HBlank clock pulses into the corresponding timers.
     result.timer0Irq = memory_.timer0().advanceDotClockPulses(
         gpuTiming.dotClockTicks) || result.timer0Irq;
     result.timer1Irq = memory_.timer1().advanceHBlankPulses(
