@@ -26,6 +26,11 @@ bool Ps1System::loadDiscImage(const std::vector<std::uint8_t>& image) noexcept {
     return memory_.cdrom().loadImage(image);
 }
 
+bool Ps1System::loadDiscCue(const std::string& cueText, const std::string& binFilename,
+                            const std::vector<std::uint8_t>& binImage) noexcept {
+    return memory_.cdrom().loadCue(cueText, binFilename, binImage);
+}
+
 SystemStepResult Ps1System::step() {
     SystemStepResult result{};
     cpu_.cop0().setHardwareInterruptPending(memory_.interrupts().active());
