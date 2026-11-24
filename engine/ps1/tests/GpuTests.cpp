@@ -48,7 +48,7 @@ int main() {
 
     // GP0(E1) bit 9 enables the PS1 4x4 dithering matrix for Gouraud polygons.
     gpu.writeGp0(0xE1000000u); // dithering disabled
-    gpu.writeGp0(0x30000080u); // vertex 0 color is in the command word
+    gpu.writeGp0(0x30808080u); // vertex 0 color is in the command word
     gpu.writeGp0(100u | (100u << 16));
     gpu.writeGp0(0x00808080u);
     gpu.writeGp0(120u | (100u << 16));
@@ -57,7 +57,7 @@ int main() {
     assert(vram.readPixel(105u, 105u, pixel) && pixel == 0x4210u);
 
     gpu.writeGp0(0xE1000200u); // enable dithering (E1 bit 9)
-    gpu.writeGp0(0x30000080u);
+    gpu.writeGp0(0x30808080u);
     gpu.writeGp0(100u | (100u << 16));
     gpu.writeGp0(0x00808080u);
     gpu.writeGp0(120u | (100u << 16));
