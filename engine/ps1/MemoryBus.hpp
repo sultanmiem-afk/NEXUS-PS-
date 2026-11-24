@@ -7,6 +7,7 @@
 #include "InterruptController.hpp"
 #include "Ram.hpp"
 #include "Scratchpad.hpp"
+#include "Spu.hpp"
 #include "Timer0.hpp"
 #include "Timer1.hpp"
 #include "Timer2.hpp"
@@ -33,6 +34,8 @@ public:
     const Timer2& timer2() const noexcept { return timer2_; }
     InterruptController& interrupts() noexcept { return interrupts_; }
     const InterruptController& interrupts() const noexcept { return interrupts_; }
+    Spu& spu() noexcept { return spu_; }
+    const Spu& spu() const noexcept { return spu_; }
     Cdrom& cdrom() noexcept { return cdrom_; }
     const Cdrom& cdrom() const noexcept { return cdrom_; }
     BiosRom& bios() noexcept { return bios_; }
@@ -52,6 +55,7 @@ private:
     Scratchpad scratchpad_{};
     BiosRom bios_{};
     Cdrom cdrom_{};
+    Spu spu_{};
     DmaController dma_{};
     InterruptController interrupts_{};
     Timer0 timer0_{};
