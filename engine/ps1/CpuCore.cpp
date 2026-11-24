@@ -58,6 +58,15 @@ CpuStepResult CpuCore::step() {
     CpuStepResult result{};
     result.instruction_pc = state_.pc;
 
+    // Interrupts are sampled at instruction boundaries before fetching the next instruction.
+    if (cop0_.interruptPending()) {
+        commit_pending_load();
+        cop0_.enter_exception(state_, CpuException::Interrupt, state_.pc, in_delay_slot_);
+        in_delay_slot_ = false;
+        result.status = CpuStepStatus::ExceptionTaken;
+        return result;
+    }
+
     if ((state_.pc & 3u) != 0) {
         commit_pending_load();
         cop0_.enter_exception(state_, CpuException::AddressLoad, state_.pc, in_delay_slot_, state_.pc);
