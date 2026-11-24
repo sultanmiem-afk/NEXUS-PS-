@@ -13,6 +13,8 @@ public:
     static constexpr std::size_t kRamSize = 512u * 1024u;
     static constexpr std::size_t kVoiceCount = 24u;
 
+    enum class AdsrPhase : std::uint8_t { Off, Attack, Decay, Sustain, Release };
+
     struct VoiceState {
         std::uint16_t volumeLeft = 0;
         std::uint16_t volumeRight = 0;
@@ -28,6 +30,7 @@ public:
         bool adpcmRepeat = false;
         std::uint16_t currentAddress = 0;
         std::uint8_t sampleIndex = 0;
+        AdsrPhase adsrPhase = AdsrPhase::Off;
     };
 
     Spu() noexcept { reset(); }
@@ -49,6 +52,8 @@ public:
     bool voiceSamples(std::size_t index, std::array<std::int16_t, 28>& samples) const noexcept;
     // Returns the next decoded sample; false means the voice has stopped or is invalid.
     bool nextVoiceSample(std::size_t index, std::int16_t& sample) noexcept;
+    // Advance one voice envelope by output-sample ticks; each voice owns its own phase/counter.
+    bool advanceAdsr(std::size_t index, std::uint32_t sampleTicks = 1u) noexcept;
 
     bool readRam8(std::uint32_t address, std::uint8_t& value) const noexcept;
     bool readRam16(std::uint32_t address, std::uint16_t& value) const noexcept;
@@ -65,12 +70,14 @@ private:
     std::array<std::array<std::int16_t, 28>, kVoiceCount> voiceSamples_{};
     std::array<std::int32_t, kVoiceCount> adpcmHistory1_{};
     std::array<std::int32_t, kVoiceCount> adpcmHistory2_{};
+    std::array<std::uint32_t, kVoiceCount> adsrRateCounters_{};
     std::uint32_t keyOnMask_ = 0;
     std::uint32_t keyOffMask_ = 0;
 
     static bool isMappedRegister(std::uint32_t offset) noexcept;
     void applyKeyMask(std::uint32_t mask, bool keyOn) noexcept;
     bool decodeVoiceBlock(std::size_t index) noexcept;
+    void updateAdsrPhase(std::size_t index) noexcept;
 };
 
 } // namespace nexus::ps1
