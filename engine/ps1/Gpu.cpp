@@ -324,7 +324,7 @@ void Gpu::writeGp1(std::uint32_t value) noexcept {
 }
 
 std::uint32_t Gpu::readStatus() const noexcept {
-    std::uint32_t status = 0x14802000u;
+    std::uint32_t status = 0x14002000u;
     status |= (displayDisabled_ ? 1u : 0u) << 23;
     status |= (dmaDirection_ & 3u) << 29;
     if (transferMode_ == TransferMode::None) status |= 1u << 26;
