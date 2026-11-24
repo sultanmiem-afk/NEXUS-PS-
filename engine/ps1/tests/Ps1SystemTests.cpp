@@ -47,8 +47,13 @@ int main() {
     assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 3));
     system.memory().interrupts().request(1u << 3);
     assert(system.memory().interrupts().active());
-    assert(system.step().cpu.status == CpuStepStatus::Executed);
+    // Enable global interrupts and the IP2 hardware interrupt mask in CP0.
+    system.cpu().cop0().write(Cop0::kStatus, (1u << 0) | (1u << 10));
+    const auto irqStep = system.step();
+    assert(irqStep.cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(system.cpu().state().pc == 0x80000080u);
     assert((system.cpu().cop0().read(Cop0::kCause) & (1u << 10)) != 0u);
+    assert((system.cpu().cop0().read(Cop0::kCause) & (0x1Fu << 2)) == 0u);
     assert(system.memory().write32(InterruptController::kStatusAddress, ~(1u << 3)));
     assert(!system.memory().interrupts().active());
     assert(system.step().cpu.status == CpuStepStatus::Executed);
