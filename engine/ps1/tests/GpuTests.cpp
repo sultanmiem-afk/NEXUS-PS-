@@ -107,6 +107,36 @@ int main() {
     gpu.writeGp0(0u);
     assert(vram.readPixel(635, 105, pixel) && pixel == 0x7C00u);
 
+    // GP0 untextured rectangle family: variable, 1x1, 8x8 and 16x16.
+    gpu.writeGp0(0x600000FFu);
+    gpu.writeGp0(700u | (100u << 16));
+    gpu.writeGp0(5u | (3u << 16));
+    assert(vram.readPixel(704, 102, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(705, 102, pixel) && pixel == 0u);
+
+    gpu.writeGp0(0x6800FF00u);
+    gpu.writeGp0(710u | (100u << 16));
+    assert(vram.readPixel(710, 100, pixel) && pixel == 0x03E0u);
+    assert(vram.readPixel(711, 100, pixel) && pixel == 0u);
+
+    gpu.writeGp0(0x700000FFu);
+    gpu.writeGp0(720u | (100u << 16));
+    assert(vram.readPixel(727, 107, pixel) && pixel == 0x001Fu);
+    assert(vram.readPixel(728, 107, pixel) && pixel == 0u);
+
+    gpu.writeGp0(0x7800FF00u);
+    gpu.writeGp0(740u | (100u << 16));
+    assert(vram.readPixel(755, 115, pixel) && pixel == 0x03E0u);
+    assert(vram.readPixel(756, 115, pixel) && pixel == 0u);
+
+    // Untextured semi-transparency mode 0 averages source and destination.
+    vram.writePixel(800u, 100u, 0x001Fu);
+    gpu.writeGp0(0xE1000000u);
+    gpu.writeGp0(0x6100FF00u);
+    gpu.writeGp0(800u | (100u << 16));
+    gpu.writeGp0(1u | (1u << 16));
+    assert(vram.readPixel(800u, 100u, pixel) && pixel == 0x020Fu);
+
     gpu.writeGp0(0x400000FFu);
     gpu.writeGp0(300u | (300u << 16));
     gpu.writeGp0(310u | (305u << 16));
