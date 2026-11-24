@@ -24,6 +24,7 @@ bool Ps1System::loadBios(const std::vector<std::uint8_t>& image) noexcept {
 
 SystemStepResult Ps1System::step() {
     SystemStepResult result{};
+    cpu_.cop0().setHardwareInterruptPending(memory_.interrupts().active());
     result.cpu = cpu_.step();
     result.dmaTransferred = memory_.dma().executeGpuTransfer(memory_.ram(), gpu_);
     if (result.dmaTransferred)
