@@ -108,7 +108,7 @@ bool Spu::decodeAdpcmBlock(std::uint32_t ramAddress,
         const std::int32_t signedNibble = (rawNibble & 0x08u) != 0
             ? static_cast<std::int32_t>(rawNibble) - 16
             : static_cast<std::int32_t>(rawNibble);
-        const std::int32_t residual = (signedNibble << 12) >> shift;
+        const std::int32_t residual = signedNibble * (1 << (12u - shift));
         const std::int32_t prediction =
             (h1 * kFilter[filter][0] + h2 * kFilter[filter][1] + 32) >> 6;
         std::int32_t decoded = residual + prediction;
