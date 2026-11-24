@@ -616,7 +616,7 @@ int main() {
     gpu.writeGp0(0xA0000000u); // Poison word is vertex XY=(0,0), not GP0(A0).
     gpu.writeGp0(20u);
     gpu.writeGp0(0u | (20u << 16));
-    assert(vram.readPixel(5u, 5u, pixel) && pixel == 0u);
+    assert(vram.readPixel(10u, 10u, pixel) && pixel == 7u);
     gpu.writeGp0(0x020000FFu);
     gpu.writeGp0(900u | (400u << 16));
     gpu.writeGp0(1u | (1u << 16));
