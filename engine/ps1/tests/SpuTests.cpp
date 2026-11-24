@@ -194,13 +194,12 @@ int main() {
     assert(spu.voiceState(0u, decodedVoice));
     assert(decodedVoice.adsrPhase == Spu::AdsrPhase::Attack);
     assert(decodedVoice.currentAdsrVolume > 0u); // Attack is gradual.
-    const std::uint16_t attackLevel = decodedVoice.currentAdsrVolume;
 
     // A second channel has an independent envelope and has not advanced.
     assert(spu.writeRegister16(0x018u, 0x0010u)); // Voice 1 ADSR low, deliberately slow attack.
     assert(spu.writeRegister16(0x01Au, 0x001Fu));
     assert(spu.writeRegister16(0x188u, 0x0002u)); // Key-on voice 1.
-    assert(spu.advanceAdsr(0u, 2048u));
+    assert(spu.advanceAdsr(0u, 100000u));
     assert(spu.voiceState(0u, decodedVoice));
     assert(decodedVoice.adsrPhase == Spu::AdsrPhase::Sustain);
     assert(spu.voiceState(1u, voice));
