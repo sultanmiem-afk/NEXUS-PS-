@@ -75,7 +75,7 @@ private:
     void executeFlatLine() noexcept;
     void drawLine(int x0, int y0, int x1, int y1, std::uint16_t color) noexcept;
     void drawTriangle(int x0, int y0, int x1, int y1, int x2, int y2,
-                      std::uint16_t color) noexcept;
+                      std::uint32_t rgb) noexcept;
     void drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
                              int x1, int y1, std::uint32_t c1,
                              int x2, int y2, std::uint32_t c2) noexcept;
