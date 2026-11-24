@@ -100,6 +100,7 @@ GpuTimingEvents Gpu::advanceTiming(std::uint32_t cpuCycles) noexcept {
         if (scanlineClock_ >= kGpuClocksPerScanline) {
             scanlineClock_ = 0;
             scanline_ = (scanline_ + 1u) % linesPerFrame;
+            if (scanline_ == 0u) oddField_ = !oddField_;
             hBlankActive_ = true;
             const bool wasVBlank = vBlankActive_;
             vBlankActive_ = scanline_ < vStart || scanline_ >= vEnd;
@@ -159,6 +160,8 @@ void Gpu::processGp0Word(std::uint32_t value) {
 }
 
 std::uint32_t Gpu::readGp0() {
+    if (gpuInfoPending_) { gpuInfoPending_ = false; return gpuInfoLatch_; }
+    if (gpuInfoPending_) { gpuInfoPending_ = false; return gpuInfoLatch_; }
     if (transferMode_ == TransferMode::VramToCpu) {
         if (!readLatchValid_) {
             std::uint16_t first = 0;
@@ -218,7 +221,7 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
             ++unsupportedCommandCount_;
             return;
         }
-        if (opcode == 0x80) ++unsupportedCommandCount_;
+
     }
 
     packet_.push_back(value);
@@ -920,10 +923,14 @@ void Gpu::writeGp1(std::uint32_t value) noexcept {
     switch (command) {
         case 0x00: reset(); break;
         case 0x01:
+            gp0Fifo_.clear();
             packet_.clear();
             expectedWords_ = 0;
+            variablePolyline_ = false;
             transferMode_ = TransferMode::None;
+            transferIndex_ = 0;
             readLatchValid_ = false;
+            gpuInfoPending_ = false;
             break;
         case 0x02: irqPending_ = false; break;
         case 0x03: displayDisabled_ = (data & 1u) != 0; break;
@@ -932,6 +939,19 @@ void Gpu::writeGp1(std::uint32_t value) noexcept {
         case 0x06: horizontalRange_ = data; break;
         case 0x07: verticalRange_ = data; break;
         case 0x08: displayMode_ = data & 0xFFu; break;
+        case 0x10: {
+            const std::uint32_t selector = data & 0x0Fu;
+            switch (selector) {
+                case 0x02: gpuInfoLatch_ = textureWindow_; break;
+                case 0x03: gpuInfoLatch_ = drawAreaTopLeft_; break;
+                case 0x04: gpuInfoLatch_ = drawAreaBottomRight_; break;
+                case 0x05: gpuInfoLatch_ = drawOffset_; break;
+                case 0x07: gpuInfoLatch_ = 0x00000002u; break; // PS1 GPU type.
+                default: gpuInfoLatch_ = 0u; break;
+            }
+            gpuInfoPending_ = true;
+            break;
+        }
         default: break;
     }
 }
@@ -945,7 +965,13 @@ std::uint32_t Gpu::readStatus() const noexcept {
     status |= 1u << 13;                           // non-interlaced field default
     if (displayMode_ & (1u << 7)) status |= 1u << 14;
     status |= (drawMode_ & (1u << 11)) << 4;      // texture disable -> bit 15
-    status |= (displayMode_ & 0x7Fu) << 16;        // bits 16-22
+    // GPUSTAT display fields: horizontal resolution is split across bits 16-18.
+    status |= ((displayMode_ >> 6) & 1u) << 16;     // horizontal resolution 2
+    status |= (displayMode_ & 3u) << 17;            // horizontal resolution 1
+    status |= ((displayMode_ >> 2) & 1u) << 19;     // vertical resolution
+    status |= ((displayMode_ >> 3) & 1u) << 20;     // video mode
+    status |= ((displayMode_ >> 4) & 1u) << 21;     // display depth
+    status |= ((displayMode_ >> 5) & 1u) << 22;     // interlace mode
     if (displayDisabled_) status |= 1u << 23;
     if (irqPending_) status |= 1u << 24;
 
@@ -970,6 +996,7 @@ std::uint32_t Gpu::readStatus() const noexcept {
     if (readyToSendVram) status |= 1u << 27;
     if (readyForDmaBlock) status |= 1u << 28;
     status |= (dmaDirection_ & 3u) << 29;
+    if (oddField_) status |= 1u << 31;
     return status;
 }
 
