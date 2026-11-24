@@ -87,9 +87,9 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
         }
         if (opcode == 0x02) expectedWords_ = 3;
         else if (opcode == 0x20) expectedWords_ = 4;
-        else if (opcode == 0x24) expectedWords_ = 7;
+        else if (opcode == 0x24 || opcode == 0x25) expectedWords_ = 7;
         else if (opcode == 0x28) expectedWords_ = 5;
-        else if (opcode == 0x2C) expectedWords_ = 9;
+        else if (opcode == 0x2C || opcode == 0x2D) expectedWords_ = 9;
         else if (opcode == 0x30) expectedWords_ = 6;
         else if (opcode == 0x38) expectedWords_ = 8;
         else if (opcode == 0x40) expectedWords_ = 3;
@@ -114,7 +114,7 @@ void Gpu::executePacket() {
         executeFillRectangle();
     } else if (opcode == 0x20 || opcode == 0x28) {
         executeFlatPolygon();
-    } else if (opcode == 0x24 || opcode == 0x2C) {
+    } else if (opcode == 0x24 || opcode == 0x25 || opcode == 0x2C || opcode == 0x2D) {
         executeTexturedPolygon();
     } else if (opcode == 0x30 || opcode == 0x38) {
         executeGouraudPolygon();
@@ -217,7 +217,9 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
 
 
 void Gpu::executeTexturedPolygon() noexcept {
-    const bool quad = static_cast<std::uint8_t>(packet_[0] >> 24) == 0x2C;
+    const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
+    const bool quad = opcode == 0x2C || opcode == 0x2D;
+    const bool rawTexture = opcode == 0x25 || opcode == 0x2D;
     const int count = quad ? 4 : 3;
     int x[4]{}, y[4]{}, u[4]{}, v[4]{};
     std::uint16_t page = 0;
@@ -307,8 +309,22 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
             if (!vram_.readPixel(paletteX,clutY,texel)) continue;
         }
         // PS1 texture index/color zero is transparent.
-        if (texel != 0)
-            vram_.writePixel(static_cast<std::uint32_t>(px),static_cast<std::uint32_t>(py),texel);
+        if (texel != 0) {
+            if (!rawTexture) {
+                const std::uint32_t modulation = packet_[0];
+                const std::uint32_t tr = texel & 31u;
+                const std::uint32_t tg = (texel >> 5) & 31u;
+                const std::uint32_t tb = (texel >> 10) & 31u;
+                const std::uint32_t cr = modulation & 0xFFu;
+                const std::uint32_t cg = (modulation >> 8) & 0xFFu;
+                const std::uint32_t cb = (modulation >> 16) & 0xFFu;
+                const std::uint32_t r = std::min(31u, (tr * cr) / 128u);
+                const std::uint32_t g = std::min(31u, (tg * cg) / 128u);
+                const std::uint32_t b = std::min(31u, (tb * cb) / 128u);
+                texel = static_cast<std::uint16_t>(r | (g << 5) | (b << 10));
+            }
+            vram_.writePixel(static_cast<std::uint32_t>(px), static_cast<std::uint32_t>(py), texel);
+        }
     }
 }
 
