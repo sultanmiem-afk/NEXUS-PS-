@@ -11,7 +11,7 @@ int main() {
 
     assert(timer.read32(Timer1::kCounterAddress, value) && value == 0u);
     assert(timer.write32(Timer1::kTargetAddress, 2u));
-    assert(timer.write32(Timer1::kModeAddress, (1u << 4) | (1u << 6)));
+    assert(timer.write32(Timer1::kModeAddress, (1u << 3) | (1u << 4) | (1u << 6)));
     assert(!timer.advance(1u));
     assert(timer.advance(1u));
     assert((timer.mode() & (1u << 11)) != 0u);
