@@ -7,6 +7,7 @@
 #include "Ram.hpp"
 #include "Scratchpad.hpp"
 #include "Timer0.hpp"
+#include "Timer1.hpp"
 
 namespace nexus::ps1 {
 
@@ -24,6 +25,8 @@ public:
     const DmaController& dma() const noexcept { return dma_; }
     Timer0& timer0() noexcept { return timer0_; }
     const Timer0& timer0() const noexcept { return timer0_; }
+    Timer1& timer1() noexcept { return timer1_; }
+    const Timer1& timer1() const noexcept { return timer1_; }
     InterruptController& interrupts() noexcept { return interrupts_; }
     const InterruptController& interrupts() const noexcept { return interrupts_; }
     BiosRom& bios() noexcept { return bios_; }
@@ -45,6 +48,7 @@ private:
     DmaController dma_{};
     InterruptController interrupts_{};
     Timer0 timer0_{};
+    Timer1 timer1_{};
 };
 
 } // namespace nexus::ps1
