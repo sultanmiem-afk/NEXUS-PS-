@@ -13,6 +13,8 @@ an early portable interpreter and CP0 foundation.
   jumps, immediate operations, and byte/halfword/word memory access.
 - Conditional branches including BEQ, BNE, BLEZ, BGTZ, BLTZ, and BGEZ.
 - Branch-delay sequencing for ordinary branches and jumps.
+- R3000A one-instruction load delay using a pending-load writeback slot; loads
+  (including LWL/LWR) become visible after the following instruction reads its operands.
 - Little-endian LWL, LWR, SWL, and SWR word-merge instructions.
 - CP0 register file with Status, Cause, EPC, and BadVaddr access.
 - MFC0, MTC0, and RFE instruction handling.
@@ -32,8 +34,8 @@ The current unit tests are only a small initial test set.
 
 ## Next milestones
 
-1. Implement R3000A load-delay behavior and pending-write semantics.
-2. Expand instruction, exception, and edge-case tests.
+1. Expand tests for load-delay hazards, writes to the same destination, and load-to-zero.
+2. Validate exception and branch-delay edge cases.
 3. Connect the CPU to PS1 RAM, BIOS, scratchpad, and memory-mapped I/O.
 4. Add interrupt/timer/DMA interactions and improve timing accuracy.
 5. Profile on Android before considering a dynamic recompiler.
