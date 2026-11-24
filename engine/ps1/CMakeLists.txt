@@ -17,6 +17,7 @@ add_library(nexus_ps1_cpu
     Timer0.cpp
     Timer1.cpp
     Timer2.cpp
+    Spu.cpp
     Ps1System.cpp
 )
 target_include_directories(nexus_ps1_cpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -68,6 +69,10 @@ if(NEXUS_PS1_BUILD_TESTS)
     add_executable(nexus_ps1_cdrom_tests tests/CdromTests.cpp)
     target_link_libraries(nexus_ps1_cdrom_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_cdrom_tests COMMAND nexus_ps1_cdrom_tests)
+
+    add_executable(nexus_ps1_spu_tests tests/SpuTests.cpp)
+    target_link_libraries(nexus_ps1_spu_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_spu_tests COMMAND nexus_ps1_spu_tests)
 
     add_executable(nexus_ps1_system_tests tests/Ps1SystemTests.cpp)
     target_link_libraries(nexus_ps1_system_tests PRIVATE nexus_ps1_cpu)
