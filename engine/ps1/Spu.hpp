@@ -6,14 +6,15 @@
 
 namespace nexus::ps1 {
 
-// Early SPU model: sound RAM, voice register state, and key-on/key-off control.
-// ADPCM decoding, ADSR envelope progression, mixing, and audio output are later stages.
+// SPU sound RAM, ADPCM voices, ADSR, approximate stereo mixer and sample output.
 class Spu final {
 public:
     static constexpr std::size_t kRamSize = 512u * 1024u;
     static constexpr std::size_t kVoiceCount = 24u;
 
     enum class AdsrPhase : std::uint8_t { Off, Attack, Decay, Sustain, Release };
+
+    struct StereoSample { std::int16_t left = 0; std::int16_t right = 0; };
 
     struct VoiceState {
         std::uint16_t volumeLeft = 0;
@@ -55,6 +56,12 @@ public:
     // Advance one voice envelope by output-sample ticks; each voice owns its own phase/counter.
     bool advanceAdsr(std::size_t index, std::uint32_t sampleTicks = 1u) noexcept;
 
+    // Mix one output frame from all active voices. This is a simplified model;
+    // pitch modulation, hardware volume sweeps and the full reverb unit are not modeled.
+    StereoSample mixSample() noexcept;
+    bool popOutputSample(StereoSample& sample) noexcept;
+    std::size_t queuedOutputSamples() const noexcept;
+
     bool readRam8(std::uint32_t address, std::uint8_t& value) const noexcept;
     bool readRam16(std::uint32_t address, std::uint16_t& value) const noexcept;
     bool readRam32(std::uint32_t address, std::uint32_t& value) const noexcept;
@@ -71,6 +78,14 @@ private:
     std::array<std::int32_t, kVoiceCount> adpcmHistory1_{};
     std::array<std::int32_t, kVoiceCount> adpcmHistory2_{};
     std::array<std::uint32_t, kVoiceCount> adsrRateCounters_{};
+    static constexpr std::size_t kOutputQueueSize = 4096u;
+    std::array<StereoSample, kOutputQueueSize> outputQueue_{};
+    std::size_t outputRead_ = 0;
+    std::size_t outputWrite_ = 0;
+    std::size_t outputCount_ = 0;
+    std::array<std::int32_t, 512u> reverbDelayLeft_{};
+    std::array<std::int32_t, 512u> reverbDelayRight_{};
+    std::size_t reverbPosition_ = 0;
     std::uint32_t keyOnMask_ = 0;
     std::uint32_t keyOffMask_ = 0;
 
@@ -78,6 +93,7 @@ private:
     void applyKeyMask(std::uint32_t mask, bool keyOn) noexcept;
     bool decodeVoiceBlock(std::size_t index) noexcept;
     void updateAdsrPhase(std::size_t index) noexcept;
+    static std::int16_t clampSample(std::int64_t value) noexcept;
 };
 
 } // namespace nexus::ps1
