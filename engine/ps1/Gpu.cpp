@@ -10,6 +10,7 @@ Gpu::Gpu(Vram& vram) noexcept : vram_(vram) {
 }
 
 void Gpu::reset() noexcept {
+    gp0Fifo_.clear();
     packet_.clear();
     expectedWords_ = 0;
     transferMode_ = TransferMode::None;
@@ -111,6 +112,24 @@ std::uint32_t Gpu::decodeTransferDimension(std::uint16_t value,
 }
 
 void Gpu::writeGp0(std::uint32_t value) {
+    processGp0Word(value);
+}
+
+bool Gpu::enqueueGp0(std::uint32_t value) noexcept {
+    return gp0Fifo_.push(value);
+}
+
+std::size_t Gpu::serviceGp0Fifo(std::size_t maxWords) {
+    std::size_t serviced = 0;
+    std::uint32_t value = 0;
+    while (serviced < maxWords && gp0Fifo_.pop(value)) {
+        processGp0Word(value);
+        ++serviced;
+    }
+    return serviced;
+}
+
+void Gpu::processGp0Word(std::uint32_t value) {
     if (transferMode_ == TransferMode::CpuToVram) {
         const std::uint16_t first = static_cast<std::uint16_t>(value);
         writeTransferPixel(first);
