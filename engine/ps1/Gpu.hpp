@@ -117,7 +117,7 @@ private:
     std::uint32_t maskSetting_ = 0;
     std::size_t unsupportedCommandCount_ = 0;
 
-    static std::uint32_t color24To15(std::uint32_t rgb, bool semiTransparent = false) noexcept;
+    static std::uint32_t color24To15(std::uint32_t rgb) noexcept;
     static std::uint32_t decodeTransferDimension(std::uint16_t value,
                                                   std::uint32_t maximum) noexcept;
     void processGp0Word(std::uint32_t value);
@@ -143,7 +143,7 @@ private:
     void writeDrawPixel(int x, int y, std::uint16_t source, bool semiTransparent) noexcept;
     void drawLine(int x0, int y0, int x1, int y1, std::uint16_t color, bool semiTransparent) noexcept;
     void drawTriangle(int x0, int y0, int x1, int y1, int x2, int y2,
-                      std::uint32_t rgb) noexcept;
+                      std::uint32_t rgb, bool semiTransparent = false) noexcept;
     void drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
                              int x1, int y1, std::uint32_t c1,
                              int x2, int y2, std::uint32_t c2, bool semiTransparent = false) noexcept;
