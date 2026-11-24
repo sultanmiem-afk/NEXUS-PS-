@@ -165,6 +165,22 @@ int main() {
     assert(spu.voiceState(0u, decodedVoice) && !decodedVoice.keyedOn);
     assert(!spu.nextVoiceSample(0u, nextSample));
 
+    // A terminal ADPCM block closes the gate and lets the ADSR release tail finish.
+    spu.reset();
+    assert(spu.writeRam8(0u, 0x0Cu));
+    assert(spu.writeRam8(1u, 0x01u)); // End without repeat.
+    for (std::uint32_t i = 2u; i < 16u; ++i) assert(spu.writeRam8(i, 0x11u));
+    assert(spu.writeRegister16(0x008u, 0x7FF0u));
+    assert(spu.writeRegister16(0x00Au, 0x001Fu));
+    assert(spu.writeRegister16(0x188u, 1u));
+    assert(spu.advanceAdsr(0u, 100u));
+    for (unsigned i = 0; i < 28u; ++i) assert(spu.nextVoiceSample(0u, nextSample));
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(!decodedVoice.keyedOn && decodedVoice.adsrPhase == Spu::AdsrPhase::Release);
+    assert(spu.advanceAdsr(0u, 4096u) == false);
+    assert(spu.voiceState(0u, decodedVoice));
+    assert(decodedVoice.adsrPhase == Spu::AdsrPhase::Off);
+
     // End+repeat jumps to the configured repeat address.
     spu.reset();
     assert(spu.writeRam8(0u, 0x0Cu));
