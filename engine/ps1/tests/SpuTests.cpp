@@ -221,6 +221,79 @@ int main() {
     assert(spu.voiceState(1u, voice));
     assert(voice.adsrPhase == Spu::AdsrPhase::Attack); // Voice 1 was not affected.
 
+    // Two independent voices mix additively into stereo without sharing decode/envelope state.
+    auto configureMixVoice = [](Spu& target, std::size_t voiceIndex,
+                                std::uint16_t startAddress, std::uint8_t packedNibble) {
+        const std::uint32_t byteAddress = static_cast<std::uint32_t>(startAddress) * 8u;
+        assert(target.writeRam8(byteAddress, 0x00u)); // Shift 0, filter 0.
+        assert(target.writeRam8(byteAddress + 1u, 0x00u)); // Continue to next ADPCM block.
+        for (std::uint32_t i = 2u; i < 16u; ++i)
+            assert(target.writeRam8(byteAddress + i, packedNibble));
+        const std::uint32_t base = static_cast<std::uint32_t>(voiceIndex) * 0x10u;
+        assert(target.writeRegister16(base + 0x0u, 0x7FFFu));
+        assert(target.writeRegister16(base + 0x2u, 0x7FFFu));
+        assert(target.writeRegister16(base + 0x6u, startAddress));
+        assert(target.writeRegister16(base + 0x8u, 0x7FF0u));
+        assert(target.writeRegister16(base + 0xAu, 0x001Fu));
+    };
+
+    Spu twoVoiceMix;
+    assert(twoVoiceMix.writeRegister16(0x180u, 0x7FFFu)); // Main left volume.
+    assert(twoVoiceMix.writeRegister16(0x182u, 0x7FFFu)); // Main right volume.
+    configureMixVoice(twoVoiceMix, 0u, 0u, 0x11u);
+    configureMixVoice(twoVoiceMix, 1u, 2u, 0x22u);
+    assert(twoVoiceMix.writeRegister16(0x188u, 0x0003u));
+    assert(twoVoiceMix.advanceAdsr(0u, 100000u));
+    assert(twoVoiceMix.advanceAdsr(1u, 100000u));
+    const auto combined = twoVoiceMix.mixSample();
+    Spu singleVoiceA;
+    assert(singleVoiceA.writeRegister16(0x180u, 0x7FFFu));
+    assert(singleVoiceA.writeRegister16(0x182u, 0x7FFFu));
+    configureMixVoice(singleVoiceA, 0u, 0u, 0x11u);
+    assert(singleVoiceA.writeRegister16(0x188u, 1u));
+    assert(singleVoiceA.advanceAdsr(0u, 100000u));
+    const auto isolatedA = singleVoiceA.mixSample();
+    Spu singleVoiceB;
+    assert(singleVoiceB.writeRegister16(0x180u, 0x7FFFu));
+    assert(singleVoiceB.writeRegister16(0x182u, 0x7FFFu));
+    configureMixVoice(singleVoiceB, 0u, 0u, 0x22u);
+    assert(singleVoiceB.writeRegister16(0x188u, 1u));
+    assert(singleVoiceB.advanceAdsr(0u, 100000u));
+    const auto isolatedB = singleVoiceB.mixSample();
+    assert(combined.left == isolatedA.left + isolatedB.left);
+    assert(combined.right == isolatedA.right + isolatedB.right);
+    assert(combined.left > 0 && combined.right > 0);
+    assert(twoVoiceMix.voiceState(0u, decodedVoice) && decodedVoice.sampleIndex == 1u);
+    assert(twoVoiceMix.voiceState(1u, voice) && voice.sampleIndex == 1u);
+    assert(twoVoiceMix.queuedOutputSamples() == 1u);
+    Spu::StereoSample queued{};
+    assert(twoVoiceMix.popOutputSample(queued));
+    assert(queued.left == combined.left && queued.right == combined.right);
+    assert(!twoVoiceMix.popOutputSample(queued));
+
+    // Reverb is a bounded approximate stereo feedback delay and can be enabled independently.
+    Spu reverbSpu;
+    assert(reverbSpu.writeRegister16(0x180u, 0x7FFFu));
+    assert(reverbSpu.writeRegister16(0x182u, 0x7FFFu));
+    for (std::uint32_t block = 0; block < 20u; ++block) {
+        const std::uint32_t address = block * 16u;
+        assert(reverbSpu.writeRam8(address, 0x00u));
+        assert(reverbSpu.writeRam8(address + 1u, 0x00u));
+        for (std::uint32_t i = 2u; i < 16u; ++i)
+            assert(reverbSpu.writeRam8(address + i, 0x11u));
+    }
+    assert(reverbSpu.writeRegister16(0x000u, 0x7FFFu));
+    assert(reverbSpu.writeRegister16(0x002u, 0x7FFFu));
+    assert(reverbSpu.writeRegister16(0x008u, 0x7FF0u));
+    assert(reverbSpu.writeRegister16(0x00Au, 0x001Fu));
+    assert(reverbSpu.writeRegister16(0x006u, 0u));
+    assert(reverbSpu.writeRegister16(0x188u, 1u));
+    assert(reverbSpu.advanceAdsr(0u, 100000u));
+    assert(reverbSpu.writeRegister16(0x1A8u, 0x0080u)); // Approximate reverb enable.
+    Spu::StereoSample reverbFrame{};
+    for (unsigned i = 0; i < 513u; ++i) reverbFrame = reverbSpu.mixSample();
+    assert(reverbFrame.left > 0 && reverbFrame.right > 0);
+
     // Misaligned offsets and addresses outside the SPU map fail.
     assert(!spu.readRegister16(0x001u, reg));
     assert(!spu.writeRegister16(0x201u, 0x1234u));
