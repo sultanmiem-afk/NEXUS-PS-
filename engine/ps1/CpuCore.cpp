@@ -198,21 +198,40 @@ CpuStepResult CpuCore::step() {
         }
         break;
 
-    case 0x01: { // REGIMM: BLTZ / BGEZ
+    case 0x01: { // REGIMM: BLTZ / BGEZ / BLTZAL / BGEZAL
         const auto condition = ins.rt();
         const bool negative = static_cast<std::int32_t>(rs) < 0;
-        if (condition == 0x00u) { // BLTZ
-            if (negative) {
-                branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
-                in_delay_slot_ = true;
-            }
-        } else if (condition == 0x01u) { // BGEZ
-            if (!negative) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
-            in_delay_slot_ = true;
-        } else {
+        bool taken = false;
+        bool link = false;
+
+        switch (condition) {
+        case 0x00u: // BLTZ
+            taken = negative;
+            break;
+        case 0x01u: // BGEZ
+            taken = !negative;
+            break;
+        case 0x10u: // BLTZAL
+            taken = negative;
+            link = true;
+            break;
+        case 0x11u: // BGEZAL
+            taken = !negative;
+            link = true;
+            break;
+        default:
             raise_exception(CpuException::ReservedInstruction);
+            break;
         }
-        if (condition == 0x00u) in_delay_slot_ = true;
+
+        if (result.status != CpuStepStatus::ExceptionTaken) {
+            if (taken) {
+                if (link) write_reg(31, state_.pc + 4u);
+                branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+            }
+            // REGIMM branches execute one delay-slot instruction whether taken or not.
+            in_delay_slot_ = true;
+        }
         break;
     }
 
