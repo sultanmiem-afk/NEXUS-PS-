@@ -26,7 +26,10 @@ void Gpu::reset() noexcept {
     displayMode_ = 0;
     gpuClockRemainder_ = 0;
     scanlineClock_ = 0;
+    scanline_ = 0;
     dotClockRemainder_ = 0;
+    hBlankActive_ = false;
+    vBlankActive_ = true;
     drawMode_ = textureWindow_ = drawAreaTopLeft_ = 0;
     drawAreaBottomRight_ = drawOffset_ = maskSetting_ = 0;
     unsupportedCommandCount_ = 0;
@@ -34,36 +37,46 @@ void Gpu::reset() noexcept {
 
 GpuTimingEvents Gpu::advanceTiming(std::uint32_t cpuCycles) noexcept {
     GpuTimingEvents events{};
-    // The PS1 GPU clock is approximately 11/7 of the CPU clock in this
-    // initial NTSC-like timing model. PAL and exact clock domains are TODO.
+    // NTSC/PAL line counts and GPU/CPU ratio are still a timing approximation.
     constexpr std::uint32_t kGpuClocksPerCpuNumerator = 11u;
     constexpr std::uint32_t kGpuClocksPerCpuDenominator = 7u;
     constexpr std::uint32_t kGpuClocksPerScanline = 3413u;
-
+    const std::uint32_t linesPerFrame = (displayMode_ & (1u << 3)) ? 314u : 263u;
     const std::uint32_t scaled = gpuClockRemainder_ +
         cpuCycles * kGpuClocksPerCpuNumerator;
     const std::uint32_t gpuClocks = scaled / kGpuClocksPerCpuDenominator;
     gpuClockRemainder_ = scaled % kGpuClocksPerCpuDenominator;
-
-    // Horizontal dot-clock divider selected by GP1 display mode.
     const std::uint32_t horizontalMode = displayMode_ & 3u;
     const bool highResolution368 = (displayMode_ & (1u << 6)) != 0u;
     constexpr std::uint32_t kDotDividers[4] = {10u, 8u, 5u, 4u};
-    const std::uint32_t dotDivider = highResolution368 ? 7u :
-        kDotDividers[horizontalMode];
-
+    const std::uint32_t dotDivider = highResolution368 ? 7u : kDotDividers[horizontalMode];
     for (std::uint32_t i = 0; i < gpuClocks; ++i) {
         ++dotClockRemainder_;
         if (dotClockRemainder_ >= dotDivider) {
             dotClockRemainder_ -= dotDivider;
             ++events.dotClockTicks;
         }
-        ++scanlineClock_;
-        if (scanlineClock_ >= kGpuClocksPerScanline) {
+        if (++scanlineClock_ >= kGpuClocksPerScanline) {
             scanlineClock_ = 0;
+            scanline_ = (scanline_ + 1u) % linesPerFrame;
             ++events.hBlankPulses;
         }
     }
+    // GP1 horizontal/vertical display ranges define the visible interval;
+    // outside it the corresponding blank signal is active.
+    std::uint32_t hStart = horizontalRange_ & 0xFFFu;
+    std::uint32_t hEnd = (horizontalRange_ >> 12) & 0xFFFu;
+    if (hEnd <= hStart || hEnd > kGpuClocksPerScanline) {
+        hStart = 608u;
+        hEnd = 3168u;
+    }
+    const std::uint32_t vStart = std::min(verticalRange_ & 0x3FFu, linesPerFrame);
+    std::uint32_t vEnd = (verticalRange_ >> 10) & 0x3FFu;
+    if (vEnd <= vStart || vEnd > linesPerFrame) vEnd = linesPerFrame - 8u;
+    hBlankActive_ = scanlineClock_ < hStart || scanlineClock_ >= hEnd;
+    vBlankActive_ = scanline_ < vStart || scanline_ >= vEnd;
+    events.hBlankActive = hBlankActive_;
+    events.vBlankActive = vBlankActive_;
     return events;
 }
 
