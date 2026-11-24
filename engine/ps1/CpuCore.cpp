@@ -205,6 +205,28 @@ CpuStepResult CpuCore::step() {
         break;
     }
 
+    case 0x22: { // LWL — little-endian left word merge
+        const auto address = rs + static_cast<std::uint32_t>(imm);
+        const auto aligned = address & ~3u;
+        std::uint32_t memory = 0;
+        if (bus_.read32(aligned, memory)) {
+            const auto shift = (address & 3u) * 8u;
+            const auto mask = 0x00FFFFFFu >> shift;
+            write_reg(ins.rt(), (rt & mask) | (memory << (24u - shift)));
+        } else result.status = CpuStepStatus::BusFault;
+        break;
+    }
+    case 0x26: { // LWR — little-endian right word merge
+        const auto address = rs + static_cast<std::uint32_t>(imm);
+        const auto aligned = address & ~3u;
+        std::uint32_t memory = 0;
+        if (bus_.read32(aligned, memory)) {
+            const auto shift = (address & 3u) * 8u;
+            const auto mask = 0xFFFFFF00u << (24u - shift);
+            write_reg(ins.rt(), (rt & mask) | (memory >> shift));
+        } else result.status = CpuStepStatus::BusFault;
+        break;
+    }
     case 0x20: { // LB
         std::uint8_t v = 0;
         if (bus_.read8(rs + static_cast<std::uint32_t>(imm), v))
@@ -222,9 +244,35 @@ CpuStepResult CpuCore::step() {
     }
     case 0x23: { std::uint32_t v = 0; if (load_address(rs + static_cast<std::uint32_t>(imm), v)) write_reg(ins.rt(), v); break; } // LW
     case 0x24: { std::uint8_t v = 0; if (bus_.read8(rs + static_cast<std::uint32_t>(imm), v)) write_reg(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LBU
-    case 0x25: { const auto a = rs + static_cast<std::uint32_t>(imm); std::uint16_t v = 0; if (a & 1u) result.status = CpuStepStatus::AddressError; else if (bus_.read16(a, v)) write_reg(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LHU
+    case 0x25: { const auto a = rs + static_cast<std::uint32_t>(imm); std::uint16_t v = 0; if (a & 1u) raise_exception(CpuException::AddressLoad, a); else if (bus_.read16(a, v)) write_reg(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LHU
+    case 0x2A: { // SWL — little-endian left word merge
+        const auto address = rs + static_cast<std::uint32_t>(imm);
+        const auto aligned = address & ~3u;
+        std::uint32_t memory = 0;
+        if (!bus_.read32(aligned, memory)) result.status = CpuStepStatus::BusFault;
+        else {
+            const auto shift = (address & 3u) * 8u;
+            const auto mask = 0xFFFFFFFFu >> (24u - shift);
+            const auto merged = (memory & ~mask) | (rt >> (24u - shift));
+            if (!bus_.write32(aligned, merged)) result.status = CpuStepStatus::BusFault;
+        }
+        break;
+    }
+    case 0x2E: { // SWR — little-endian right word merge
+        const auto address = rs + static_cast<std::uint32_t>(imm);
+        const auto aligned = address & ~3u;
+        std::uint32_t memory = 0;
+        if (!bus_.read32(aligned, memory)) result.status = CpuStepStatus::BusFault;
+        else {
+            const auto shift = (address & 3u) * 8u;
+            const auto mask = 0xFFFFFFFFu << shift;
+            const auto merged = (memory & ~mask) | (rt << shift);
+            if (!bus_.write32(aligned, merged)) result.status = CpuStepStatus::BusFault;
+        }
+        break;
+    }
     case 0x28: if (!bus_.write8(rs + static_cast<std::uint32_t>(imm), static_cast<std::uint8_t>(rt))) result.status = CpuStepStatus::BusFault; break;
-    case 0x29: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 1u) result.status = CpuStepStatus::AddressError; else if (!bus_.write16(a, static_cast<std::uint16_t>(rt))) result.status = CpuStepStatus::BusFault; break; }
+    case 0x29: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 1u) raise_exception(CpuException::AddressStore, a); else if (!bus_.write16(a, static_cast<std::uint16_t>(rt))) result.status = CpuStepStatus::BusFault; break; }
     case 0x2B: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 3u) raise_exception(CpuException::AddressStore, a); else if (!bus_.write32(a, rt)) result.status = CpuStepStatus::BusFault; break; }
     default:
         raise_exception(CpuException::ReservedInstruction);
