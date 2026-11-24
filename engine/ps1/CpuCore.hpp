@@ -54,8 +54,13 @@ private:
     CpuState state_{};
     Cop0 cop0_{};
     bool in_delay_slot_ = false;
+    bool pending_load_valid_ = false;
+    std::uint32_t pending_load_register_ = 0;
+    std::uint32_t pending_load_value_ = 0;
 
     void write_reg(std::uint32_t index, std::uint32_t value) noexcept;
+    void schedule_load(std::uint32_t index, std::uint32_t value) noexcept;
+    void commit_pending_load() noexcept;
     void branch(std::uint32_t target) noexcept;
 };
 
