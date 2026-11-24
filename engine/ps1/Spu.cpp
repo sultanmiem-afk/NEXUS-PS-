@@ -6,6 +6,9 @@ void Spu::reset() noexcept {
     clearRam();
     registers_.fill(0);
     voices_.fill(VoiceState{});
+    for (auto& samples : voiceSamples_) samples.fill(0);
+    adpcmHistory1_.fill(0);
+    adpcmHistory2_.fill(0);
     keyOnMask_ = 0;
     keyOffMask_ = 0;
 }
@@ -73,8 +76,77 @@ void Spu::applyKeyMask(std::uint32_t mask, bool keyOn) noexcept {
     for (std::size_t i = 0; i < kVoiceCount; ++i) {
         if ((mask & (1u << i)) == 0) continue;
         voices_[i].keyedOn = keyOn;
-        if (keyOn) voices_[i].currentAdsrVolume = 0;
+        if (keyOn) {
+            voices_[i].currentAdsrVolume = 0;
+            adpcmHistory1_[i] = 0;
+            adpcmHistory2_[i] = 0;
+            (void)decodeVoiceBlock(i);
+        }
     }
+}
+
+bool Spu::decodeAdpcmBlock(std::uint32_t ramAddress,
+                             std::array<std::int16_t, 28>& samples,
+                             std::int32_t& history1, std::int32_t& history2,
+                             bool& endFlag, bool& repeatFlag) const noexcept {
+    if ((ramAddress & 7u) != 0 || ramAddress > kRamSize - 16u) return false;
+
+    const std::uint8_t header = ram_[ramAddress];
+    const std::uint8_t flags = ram_[ramAddress + 1u];
+    const unsigned shift = (header & 0x0Fu) > 12u ? 9u : (header & 0x0Fu);
+    const unsigned filter = (header >> 4) & 0x0Fu;
+    static constexpr std::int32_t kFilter[5][2] = {
+        {0, 0}, {60, 0}, {115, -52}, {98, -55}, {122, -60}
+    };
+    if (filter >= 5u) return false;
+
+    std::int32_t h1 = history1;
+    std::int32_t h2 = history2;
+    for (std::size_t i = 0; i < samples.size(); ++i) {
+        const std::uint8_t packed = ram_[ramAddress + 2u + i / 2u];
+        const unsigned rawNibble = (i & 1u) == 0 ? (packed & 0x0Fu) : (packed >> 4);
+        const std::int32_t signedNibble = (rawNibble & 0x08u) != 0
+            ? static_cast<std::int32_t>(rawNibble) - 16
+            : static_cast<std::int32_t>(rawNibble);
+        const std::int32_t residual = (signedNibble << 12) >> shift;
+        const std::int32_t prediction =
+            (h1 * kFilter[filter][0] + h2 * kFilter[filter][1] + 32) >> 6;
+        std::int32_t decoded = residual + prediction;
+        if (decoded > 32767) decoded = 32767;
+        if (decoded < -32768) decoded = -32768;
+        samples[i] = static_cast<std::int16_t>(decoded);
+        h2 = h1;
+        h1 = decoded;
+    }
+
+    history1 = h1;
+    history2 = h2;
+    endFlag = (flags & 0x01u) != 0;
+    repeatFlag = (flags & 0x02u) != 0;
+    return true;
+}
+
+bool Spu::decodeVoiceBlock(std::size_t index) noexcept {
+    if (index >= kVoiceCount) return false;
+    const std::uint32_t address = static_cast<std::uint32_t>(voices_[index].startAddress) * 8u;
+    bool end = false;
+    bool repeat = false;
+    if (!decodeAdpcmBlock(address, voiceSamples_[index], adpcmHistory1_[index],
+                          adpcmHistory2_[index], end, repeat)) {
+        voices_[index].adpcmBlockValid = false;
+        return false;
+    }
+    voices_[index].adpcmBlockValid = true;
+    voices_[index].adpcmEnd = end;
+    voices_[index].adpcmRepeat = repeat;
+    return true;
+}
+
+bool Spu::voiceSamples(std::size_t index,
+                       std::array<std::int16_t, 28>& samples) const noexcept {
+    if (index >= kVoiceCount || !voices_[index].adpcmBlockValid) return false;
+    samples = voiceSamples_[index];
+    return true;
 }
 
 bool Spu::readRegister16(std::uint32_t offset, std::uint16_t& value) const noexcept {
