@@ -33,7 +33,7 @@ public:
     bool writeRam32(std::uint32_t address, std::uint32_t value) noexcept;
 
 private:
-    static constexpr std::size_t kRegisterCount = 0x400u / 2u;
+    static constexpr std::size_t kRegisterCount = 0x200u / 2u;
     std::array<std::uint8_t, kRamSize> ram_{};
     std::array<std::uint16_t, kRegisterCount> registers_{};
 
