@@ -80,6 +80,29 @@ int main() {
     assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
     assert(system.cpu().state().pc == 0x80000080u);
 
+    // CD-ROM request-mode DMA channel 3 transfers one sector through the system.
+    system.reset(0x00000000u);
+    std::vector<std::uint8_t> discSector(2048u, 0x5Au);
+    assert(system.loadDiscImage(discSector));
+    assert(system.memory().write32(DmaController::kDpcrAddress, 1u << 15));
+    assert(system.memory().write32(DmaController::kDicrAddress, (1u << 23) | (1u << 19)));
+    assert(system.memory().write32(DmaController::kBaseAddress + 0x30u, 0x1000u));
+    assert(system.memory().write32(DmaController::kBaseAddress + 0x34u, 0x00010200u));
+    assert(system.memory().write32(DmaController::kBaseAddress + 0x38u, 0x01000200u));
+    assert(system.memory().write8(0x1F801800u, 0u));
+    assert(system.memory().write8(0x1F801802u, 0x00u));
+    assert(system.memory().write8(0x1F801802u, 0x02u));
+    assert(system.memory().write8(0x1F801802u, 0x00u));
+    assert(system.memory().write8(0x1F801801u, 0x02u));
+    assert(system.memory().write8(0x1F801801u, 0x06u));
+    system.memory().cdrom().advance(Cdrom::kCyclesPerSector);
+    const auto cdDmaStep = system.step();
+    assert(cdDmaStep.cdromDmaTransferred && cdDmaStep.cdromDmaWords == 512u);
+    std::uint32_t cdWord = 0u;
+    assert(system.memory().ram().read32(0x1000u, cdWord) && cdWord == 0x5A5A5A5Au);
+    assert((system.memory().interrupts().status() & (1u << 3)) != 0u);
+    assert((system.memory().dma().dicr() & (1u << 27)) != 0u);
+
     // Timer 0 advances from CPU cycle estimates and raises I_STAT source 4.
     system.reset(0x00000000u);
     assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 4));
