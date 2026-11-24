@@ -10,14 +10,16 @@ an early portable interpreter and CP0 foundation.
 - MIPS instruction field decoder and reset-vector initialization.
 - Bus interface for the future PS1 memory subsystem.
 - Integer shifts, arithmetic/logical operations, comparisons, multiply/divide,
-  branches, jumps, immediate operations, and byte/halfword/word memory access.
-- Little-endian LWL, LWR, SWL, and SWR word-merge instructions.
+  jumps, immediate operations, and byte/halfword/word memory access.
+- Conditional branches including BEQ, BNE, BLEZ, BGTZ, BLTZ, and BGEZ.
 - Branch-delay sequencing for ordinary branches and jumps.
+- Little-endian LWL, LWR, SWL, and SWR word-merge instructions.
 - CP0 register file with Status, Cause, EPC, and BadVaddr access.
 - MFC0, MTC0, and RFE instruction handling.
 - Initial exception entry for syscall, breakpoint, reserved instruction,
   arithmetic overflow, and misaligned instruction/data addresses.
-- Exception mode-stack handling and BEV-dependent exception vector selection.
+- Initial CMake build target and unit tests for arithmetic and branch delay.
+- GitHub Actions workflow to compile the CPU target and run its tests.
 
 ## Important accuracy limits
 
@@ -26,11 +28,12 @@ Load-delay behavior, interrupt delivery and prioritization, all exception
 corner cases, precise bus-error handling, coprocessor 2/GTE operations,
 hardware timing, and some implementation-specific CPU behavior still need
 work. Current cycle counts are rough estimates, not a hardware timing model.
+The current unit tests are only a small initial test set.
 
 ## Next milestones
 
 1. Implement R3000A load-delay behavior and pending-write semantics.
-2. Add automated instruction/exception tests and compile with the Android NDK.
+2. Expand instruction, exception, and edge-case tests.
 3. Connect the CPU to PS1 RAM, BIOS, scratchpad, and memory-mapped I/O.
 4. Add interrupt/timer/DMA interactions and improve timing accuracy.
 5. Profile on Android before considering a dynamic recompiler.
