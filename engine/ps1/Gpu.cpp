@@ -112,7 +112,8 @@ std::uint32_t Gpu::decodeTransferDimension(std::uint16_t value,
 }
 
 void Gpu::writeGp0(std::uint32_t value) {
-    processGp0Word(value);
+    // Synchronous clients (including DMA) still pass each word through FIFO.
+    if (enqueueGp0(value)) serviceGp0Fifo(1u);
 }
 
 bool Gpu::enqueueGp0(std::uint32_t value) noexcept {
@@ -837,22 +838,23 @@ std::uint32_t Gpu::readStatus() const noexcept {
     if (displayDisabled_) status |= 1u << 23;
     if (irqPending_) status |= 1u << 24;
 
-    // This core has no hardware FIFO yet. Commands are consumed synchronously;
-    // an incomplete packet or active image transfer blocks a new command.
-    const bool idleForCommand =
+    // GP0 readiness reflects queued words and packet/transfer state.
+    const bool fifoHasSpace = !gp0Fifo_.full();
+    const bool fifoEmpty = gp0Fifo_.empty();
+    const bool idleForCommand = fifoEmpty &&
         packet_.empty() && transferMode_ == TransferMode::None;
     const bool readyToSendVram = transferMode_ == TransferMode::VramToCpu;
     const bool readyForDmaBlock = idleForCommand;
 
-    if (dmaDirection_ == 1u) {
-        status |= 1u << 25; // FIFO mode: modeled write FIFO is never full.
+    if (dmaDirection_ == 1u && fifoHasSpace) {
+        status |= 1u << 25; // FIFO mode: request while GP0 FIFO has space.
     } else if (dmaDirection_ == 2u && readyForDmaBlock) {
         status |= 1u << 25;
     } else if (dmaDirection_ == 3u && readyToSendVram) {
         status |= 1u << 25;
     }
 
-    if (idleForCommand) status |= 1u << 26;
+    if (fifoHasSpace) status |= 1u << 26;
     if (readyToSendVram) status |= 1u << 27;
     if (readyForDmaBlock) status |= 1u << 28;
     status |= (dmaDirection_ & 3u) << 29;
