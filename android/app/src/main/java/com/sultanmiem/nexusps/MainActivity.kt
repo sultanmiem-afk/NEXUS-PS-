@@ -7,7 +7,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.widget.Button
+import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.documentfile.provider.DocumentFile
@@ -47,15 +50,74 @@ class MainActivity : Activity() {
         val discButton = Button(this).apply { text = "Choose game (CUE or BIN)"; setOnClickListener { explainFileAccess(pickDisc, "*/*") } }
         val folderButton = Button(this).apply { text = "Create / choose games folder"; setOnClickListener { chooseGamesFolder() } }
         val importButton = Button(this).apply { text = "Copy games into NEXUS-PS folder"; setOnClickListener { chooseGamesToImport() } }
-        val notice = TextView(this).apply {
-            text = "Development build. Game loading, GPU display, audio and touch controls are not connected yet. Import copies files; originals are kept."
-            textSize = 14f
-            setPadding(0, 28, 0, 0)
+        val controllerTitle = TextView(this).apply {
+            text = "Touch Controller"
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setPadding(0, 28, 0, 12)
         }
-        listOf(title, subtitle, status, biosButton, biosInfo, discButton, discInfo, folderButton, folderInfo, importButton, notice).forEach { root.addView(it) }
-        setContentView(root)
+        val controllerStatus = TextView(this).apply {
+            text = "Controller: ready • input preview only"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 12)
+        }
+        val controller = createTouchController(controllerStatus)
+        val notice = TextView(this).apply {
+            text = "Development build. Touch buttons currently show press/release feedback; PS1 controller protocol, game loading, GPU display and audio are not connected yet. Import copies files; originals are kept."
+            textSize = 14f
+            setPadding(0, 24, 0, 20)
+        }
+        listOf(title, subtitle, status, biosButton, biosInfo, discButton, discInfo, folderButton, folderInfo, importButton, controllerTitle, controllerStatus, controller, notice).forEach { root.addView(it) }
+        val scroll = ScrollView(this).apply { isFillViewport = true; addView(root) }
+        setContentView(scroll)
         refreshFolderInfo()
         restoreSavedBios()
+    }
+
+    private fun createTouchController(statusLabel: TextView): View {
+        fun makeButton(label: String): Button = Button(this).apply {
+            text = label
+            textSize = 15f
+            isAllCaps = false
+            setOnTouchListener { view, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.alpha = 0.55f
+                        statusLabel.text = "Pressed: $label"
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.alpha = 1f
+                        statusLabel.text = "Controller: ready • input preview only"
+                        true
+                    }
+                    else -> true
+                }
+            }
+        }
+
+        fun row(vararg labels: String): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            labels.forEach { label ->
+                val button = makeButton(label)
+                val params = LinearLayout.LayoutParams(0, 64, 1f).apply {
+                    setMargins(4, 4, 4, 4)
+                }
+                addView(button, params)
+            }
+        }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(row("↑"))
+            addView(row("←", "↓", "→"))
+            addView(row("SELECT", "START"))
+            addView(row("△", "○", "×", "□"))
+            addView(row("L1", "L2", "R1", "R2"))
+        }
     }
 
     private fun loadBiosIntoCore(uri: Uri): Boolean {
