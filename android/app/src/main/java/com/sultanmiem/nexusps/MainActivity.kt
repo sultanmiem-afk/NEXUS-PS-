@@ -32,11 +32,14 @@ class MainActivity : Activity() {
     private external fun nativeCoreVersion(): String
     private external fun nativeLoadBios(image: ByteArray): Boolean
     private external fun nativeLoadDiscImage(image: ByteArray): Boolean
+    private external fun nativeLoadDiscCue(cueText: String, binFilename: String, image: ByteArray): Boolean
     private external fun nativeBiosLoaded(): Boolean
     private external fun nativeRunForCycles(cycleBudget: Long): Long
     private external fun nativeSetControllerButtons(pressedMask: Int)
     private external fun nativeSetControllerAnalogAxes(x: Int, y: Int)
     private val pressedControllerButtons = mutableSetOf<String>()
+    private var pendingCueText: String? = null
+    private var pendingCueBinName: String? = null
 
     companion object {
         init { System.loadLibrary("nexus_ps1_android") }
@@ -469,26 +472,65 @@ class MainActivity : Activity() {
                 }
             }
             pickDisc -> {
+                val pendingCue = pendingCueText
+                if (pendingCue == null && name.substringAfterLast('.', "").equals("cue", true)) {
+                    val cueText = try { readBiosBytes(uri)?.toString(Charsets.UTF_8) } catch (_: Exception) { null }
+                    val referencedBin = cueText?.lineSequence()?.mapNotNull { line ->
+                        val trimmed = line.trim()
+                        if (!trimmed.startsWith("FILE ", true)) null
+                        else if (trimmed.length > 5 && trimmed[5] == '"') trimmed.substringAfter('"').substringBefore('"')
+                        else trimmed.substringAfter("FILE", "").trim().substringBefore(' ')
+                    }?.firstOrNull { it.isNotBlank() }
+                    if (cueText == null || referencedBin == null) {
+                        discInfo.text = "Disc: invalid CUE sheet"
+                        status.text = "Could not find a FILE entry in this CUE sheet."
+                    } else {
+                        pendingCueText = cueText
+                        pendingCueBinName = referencedBin.substringAfterLast('/')
+                        status.text = "CUE loaded. Now choose its BIN file: $pendingCueBinName"
+                        explainFileAccess(pickDisc, "*/*")
+                    }
+                    return
+                }
                 status.text = "Reading disc image..."
                 val image = try { readBiosBytes(uri) } catch (e: Exception) {
                     status.text = e.message ?: "Could not read disc image"
                     null
                 }
-                if (image == null) {
+                val expectedBin = pendingCueBinName
+                if (pendingCue != null && expectedBin != null && !name.equals(expectedBin, true)) {
+                    pendingCueText = null
+                    pendingCueBinName = null
+                    discInfo.text = "Disc: wrong BIN selected"
+                    status.text = "Expected $expectedBin but selected $name. Choose the CUE again."
+                } else if (image == null) {
+                    pendingCueText = null
+                    pendingCueBinName = null
                     discInfo.text = "Disc: could not read file"
                     status.text = "Disc image read failed"
                 } else if (image.size < 2048 || (image.size % 2352 != 0 && image.size % 2048 != 0)) {
+                    pendingCueText = null
+                    pendingCueBinName = null
                     discInfo.text = "Disc: invalid image"
                     status.text = "Unsupported disc image size. Expected raw 2352-byte or cooked 2048-byte sectors."
                 } else if (!nativeBiosLoaded()) {
+                    pendingCueText = null
+                    pendingCueBinName = null
                     discInfo.text = "Disc: selected, BIOS required"
                     status.text = "Load a valid PS1 BIOS before loading a game."
-                } else if (nativeLoadDiscImage(image)) {
-                    discInfo.text = "Disc loaded: $name • ${image.size / 1024 / 1024} MiB"
-                    status.text = "Disc image loaded into PS1 CD-ROM core"
                 } else {
-                    discInfo.text = "Disc: core rejected image"
-                    status.text = "The CD-ROM core could not mount this image."
+                    val loaded = if (pendingCue != null) nativeLoadDiscCue(pendingCue, name, image)
+                                 else nativeLoadDiscImage(image)
+                    pendingCueText = null
+                    pendingCueBinName = null
+                    if (loaded) {
+                        discInfo.text = "Disc loaded: $name • ${image.size / 1024 / 1024} MiB"
+                        status.text = if (pendingCue != null) "CUE/BIN disc mounted in PS1 CD-ROM core"
+                                      else "BIN disc image loaded into PS1 CD-ROM core"
+                    } else {
+                        discInfo.text = "Disc: core rejected image"
+                        status.text = "The CD-ROM core could not mount this image."
+                    }
                 }
             }
         }
