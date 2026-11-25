@@ -33,8 +33,8 @@ class MainActivity : Activity() {
     private external fun nativeLoadBios(image: ByteArray): Boolean
     private external fun nativeBiosLoaded(): Boolean
     private external fun nativeSetControllerButtons(pressedMask: Int)
+    private external fun nativeSetControllerAnalogAxes(x: Int, y: Int)
     private val pressedControllerButtons = mutableSetOf<String>()
-    private val joystickDirections = mutableSetOf<String>()
 
     companion object {
         init { System.loadLibrary("nexus_ps1_android") }
@@ -71,7 +71,7 @@ class MainActivity : Activity() {
         }
         val controller = createTouchController(controllerStatus)
         val notice = TextView(this).apply {
-            text = "Touch buttons and virtual joystick directions update the native PS1 digital controller through SIO0. Game execution, GPU display and audio output are still separate development tasks. Import copies files; originals are kept."
+            text = "Touch buttons update the native PS1 controller through SIO0; the virtual stick sends continuous DualShock analog axes. Game execution, GPU display and audio output are still separate development tasks. Import copies files; originals are kept."
             textSize = 14f
             setPadding(0, 24, 0, 20)
         }
@@ -210,14 +210,15 @@ class MainActivity : Activity() {
             val cx=view.width/2f; val cy=view.height/2f; val r=(minOf(view.width,view.height)*0.43f).coerceAtLeast(1f)
             var dx=(x-cx)/r; var dy=(y-cy)/r; val length=kotlin.math.sqrt(dx*dx+dy*dy)
             if (length>1f) { dx/=length; dy/=length }; axisX=dx; axisY=dy
-            val next=mutableSetOf<String>(); val dead=0.38f
-            if(dy < -dead) next.add("↑"); if(dy > dead) next.add("↓"); if(dx < -dead) next.add("←"); if(dx > dead) next.add("→")
-            if(next != joystickDirections) { joystickDirections.clear(); joystickDirections.addAll(next); sendControllerState(statusLabel) }
+                val analogX = (128f + dx * 127f).toInt().coerceIn(0, 255)
+            val analogY = (128f + dy * 127f).toInt().coerceIn(0, 255)
+            nativeSetControllerAnalogAxes(analogX, analogY)
+            statusLabel.text = "Analog X: $analogX • Y: $analogY"
             view.invalidate()
         }
         view.setOnTouchListener { _, event -> when(event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_POINTER_DOWN -> { update(event.x,event.y); true }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_UP -> { axisX=0f; axisY=0f; joystickDirections.clear(); sendControllerState(statusLabel); view.invalidate(); true }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_UP -> { axisX=0f; axisY=0f; nativeSetControllerAnalogAxes(128, 128); statusLabel.text = "Analog stick centered • buttons ready"; view.invalidate(); true }
             else -> true
         } }
         return view
@@ -247,10 +248,9 @@ class MainActivity : Activity() {
     }
 
     private fun sendControllerState(statusLabel: TextView) {
-        val allPressed = pressedControllerButtons + joystickDirections
-        val mask = allPressed.fold(0) { acc, name -> acc or controllerButtonMask(name) }
+        val mask = pressedControllerButtons.fold(0) { acc, name -> acc or controllerButtonMask(name) }
         nativeSetControllerButtons(mask)
-        statusLabel.text = if (allPressed.isEmpty()) "Controller: connected • joystick centered" else "Pressed: " + allPressed.joinToString(" + ")
+        statusLabel.text = if (pressedControllerButtons.isEmpty()) "DualShock analog controller connected" else "Pressed: " + pressedControllerButtons.joinToString(" + ")
     }
 
     private fun loadBiosIntoCore(uri: Uri): Boolean {
