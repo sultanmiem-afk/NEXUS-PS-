@@ -474,5 +474,20 @@ int main() {
     assert(system.memory().read32(InterruptController::kStatusAddress, integratedIstat));
     assert((integratedIstat & (1u << 3u)) != 0u);
 
+    // The batch runner executes complete instructions up to a deterministic cycle budget.
+    system.reset(0x00000000u);
+    putWord(system.memory().ram(), 0, 0x2401002Au); // ADDIU r1, r0, 42
+    putWord(system.memory().ram(), 4, 0x24220008u); // ADDIU r2, r1, 8
+    const auto emptyRun = system.runForCycles(0u);
+    assert(emptyRun.cyclesExecuted == 0u && emptyRun.instructionsExecuted == 0u);
+    assert(system.cpu().state().pc == 0u);
+    const auto batchRun = system.runForCycles(2u);
+    assert(batchRun.cyclesExecuted == 2u);
+    assert(batchRun.instructionsExecuted == 2u);
+    assert(batchRun.lastStep.cpu.status == CpuStepStatus::Executed);
+    assert(system.cpu().state().gpr[1] == 42u);
+    assert(system.cpu().state().gpr[2] == 50u);
+    assert(system.cpu().state().pc == 8u);
+
     return 0;
 }
