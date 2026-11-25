@@ -85,3 +85,22 @@ Java_com_sultanmiem_nexusps_MainActivity_nativeSetControllerAnalogAxes(
         gSystem->memory().controller().setAnalogAxes(gAnalogX, gAnalogY);
     }
 }
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_sultanmiem_nexusps_MainActivity_nativeLoadDiscImage(
+    JNIEnv* env, jobject, jbyteArray image) {
+    if (image == nullptr || gSystem == nullptr ||
+        !gSystem->memory().bios().loaded()) return JNI_FALSE;
+
+    const jsize length = env->GetArrayLength(image);
+    if (length < 2048) return JNI_FALSE;
+
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+    env->GetByteArrayRegion(image, 0, length,
+        reinterpret_cast<jbyte*>(bytes.data()));
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return JNI_FALSE;
+    }
+    return gSystem->loadDiscImage(bytes) ? JNI_TRUE : JNI_FALSE;
+}
