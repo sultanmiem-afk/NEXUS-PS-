@@ -11,6 +11,9 @@ void ControllerPort::reset() noexcept {
     baud_ = 0;
     pollPhase_ = 0;
     polling_ = false;
+    analogMode_ = false;
+    analogX_ = 128;
+    analogY_ = 128;
 }
 
 void ControllerPort::queueResponse(std::uint8_t value) noexcept {
@@ -74,6 +77,23 @@ void ControllerPort::writeData(std::uint8_t value) noexcept {
             break;
         case 4:
             queueResponse(static_cast<std::uint8_t>(~((latchedButtons_ >> 8u) & 0x00FFu)));
+            pollPhase_ = analogMode_ ? 5u : 0u;
+            if (!analogMode_) polling_ = false;
+            break;
+        case 5:
+            queueResponse(128u); // Right stick X (unused)
+            pollPhase_ = 6;
+            break;
+        case 6:
+            queueResponse(128u); // Right stick Y (unused)
+            pollPhase_ = 7;
+            break;
+        case 7:
+            queueResponse(analogX_); // Left stick X
+            pollPhase_ = 8;
+            break;
+        case 8:
+            queueResponse(analogY_); // Left stick Y
             pollPhase_ = 0;
             polling_ = false;
             break;
