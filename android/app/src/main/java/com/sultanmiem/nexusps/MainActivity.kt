@@ -23,6 +23,8 @@ class MainActivity : Activity() {
     private val importGames = 13
     private val prefs by lazy { getSharedPreferences("nexus_ps", MODE_PRIVATE) }
     private external fun nativeCoreVersion(): String
+    private external fun nativeLoadBios(image: ByteArray): Boolean
+    private external fun nativeBiosLoaded(): Boolean
 
     companion object {
         init { System.loadLibrary("nexus_ps1_android") }
@@ -53,6 +55,30 @@ class MainActivity : Activity() {
         listOf(title, subtitle, status, biosButton, biosInfo, discButton, discInfo, folderButton, folderInfo, importButton, notice).forEach { root.addView(it) }
         setContentView(root)
         refreshFolderInfo()
+        restoreSavedBios()
+    }
+
+    private fun loadBiosIntoCore(uri: Uri): Boolean {
+        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return false
+        return nativeLoadBios(bytes) && nativeBiosLoaded()
+    }
+
+    private fun restoreSavedBios() {
+        val saved = prefs.getString("bios_uri", null) ?: return
+        val uri = Uri.parse(saved)
+        try {
+            val error = validateBios(uri)
+            if (error != null || !loadBiosIntoCore(uri)) {
+                biosInfo.text = "BIOS: saved file unavailable or failed to load"
+                status.text = error ?: "Could not load saved BIOS into native core"
+            } else {
+                biosInfo.text = "BIOS: loaded into native PS1 core"
+                status.text = "BIOS loaded • PS1 boot screen is not started"
+            }
+        } catch (e: Exception) {
+            biosInfo.text = "BIOS: saved file unavailable"
+            status.text = e.message ?: "Could not restore saved BIOS"
+        }
     }
 
     private fun explainFileAccess(requestCode: Int, mime: String) {
@@ -224,9 +250,16 @@ class MainActivity : Activity() {
                         .setMessage(error)
                         .setPositiveButton("OK", null).show()
                 } else {
-                    prefs.edit().putString("bios_uri", uri.toString()).apply()
-                    biosInfo.text = "BIOS validated: $name (512 KiB)"
-                    status.text = "BIOS file passed size and basic-content checks"
+                    val loaded = try { loadBiosIntoCore(uri) } catch (_: Exception) { false }
+                    if (loaded) {
+                        prefs.edit().putString("bios_uri", uri.toString()).apply()
+                        biosInfo.text = "BIOS loaded: $name (512 KiB)"
+                        status.text = "BIOS is loaded inside the native PS1 core"
+                    } else {
+                        prefs.edit().remove("bios_uri").apply()
+                        biosInfo.text = "BIOS: validated but native loading failed"
+                        status.text = "The BIOS passed file checks but could not be loaded by the core"
+                    }
                 }
             }
             pickDisc -> discInfo.text = "Disc file selected: " + name
