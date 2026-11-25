@@ -970,8 +970,7 @@ bool Gpu::copyDisplayToRgba8888(std::uint32_t* destination, std::size_t capacity
     static constexpr std::uint32_t kWidths[4] = {256u, 320u, 512u, 640u};
     width = (displayMode_ & (1u << 6)) ? 368u : kWidths[horizontalMode];
     if (displayMode_ & (1u << 2)) height = 480u;
-    else height = 240u;
-    if (displayMode_ & (1u << 3)) height = std::min(height, 256u);
+    else height = (displayMode_ & (1u << 3)) ? 256u : 240u;
     width = std::min(width, kMaxWidth);
     height = std::min(height, kMaxHeight);
 
