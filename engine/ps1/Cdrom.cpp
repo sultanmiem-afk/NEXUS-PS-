@@ -187,10 +187,18 @@ bool Cdrom::readSector(std::uint32_t lba, std::vector<std::uint8_t>& output) con
     const std::uint32_t fileSector = selected->fileStartSector +
         (lba - selected->discStartLba);
     const std::size_t offset = static_cast<std::size_t>(fileSector) * selected->sectorSize;
-    if (offset + selected->dataOffset + selected->userDataSize > image_.size()) return false;
+    std::size_t userDataSize = selected->userDataSize;
+    // MODE2 sectors carry a duplicated four-byte subheader at offsets 16 and
+    // 20. Submode bit 5 identifies Form 2, whose user-data payload is 2324
+    // bytes instead of the 2048-byte Form 1 payload.
+    if (selected->sectorSize == kRawSectorSize && selected->dataOffset == 24u &&
+        offset + 18u < image_.size() && (image_[offset + 18u] & 0x20u) != 0u) {
+        userDataSize = 2324u;
+    }
+    if (offset + selected->dataOffset + userDataSize > image_.size()) return false;
     output.assign(image_.begin() + static_cast<std::ptrdiff_t>(offset + selected->dataOffset),
                   image_.begin() + static_cast<std::ptrdiff_t>(
-                      offset + selected->dataOffset + selected->userDataSize));
+                      offset + selected->dataOffset + userDataSize));
     return true;
 }
 
