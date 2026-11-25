@@ -8,6 +8,7 @@
 
 namespace {
 std::unique_ptr<nexus::ps1::Ps1System> gSystem;
+std::uint16_t gControllerButtons = 0;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -40,6 +41,7 @@ Java_com_sultanmiem_nexusps_MainActivity_nativeLoadBios(
 
     // Keep the BIOS mapped in the native machine. Do not step the CPU here:
     // the Android app UI opens directly and the PS1 BIOS boot animation is not run.
+    candidate->memory().controller().setButtons(gControllerButtons);
     gSystem = std::move(candidate);
     return JNI_TRUE;
 }
@@ -48,4 +50,13 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_sultanmiem_nexusps_MainActivity_nativeBiosLoaded(JNIEnv*, jobject) {
     return (gSystem != nullptr && gSystem->memory().bios().loaded())
         ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sultanmiem_nexusps_MainActivity_nativeSetControllerButtons(
+    JNIEnv*, jobject, jint pressedMask) {
+    gControllerButtons = static_cast<std::uint16_t>(pressedMask & 0xFFFF);
+    if (gSystem != nullptr) {
+        gSystem->memory().controller().setButtons(gControllerButtons);
+    }
 }
