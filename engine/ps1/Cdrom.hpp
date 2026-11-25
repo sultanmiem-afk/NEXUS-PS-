@@ -63,6 +63,7 @@ private:
     bool dataReady_ = false;
     std::deque<std::uint8_t> parameters_{};
     std::deque<std::uint8_t> responses_{};
+    std::deque<std::uint8_t> pendingInterrupts_{};
     std::deque<std::uint8_t> data_{};
 
     void executeCommand(std::uint8_t command) noexcept;
