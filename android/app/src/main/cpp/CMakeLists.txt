@@ -12,6 +12,7 @@ add_library(nexus_ps1_core STATIC
     ${PS1_DIR}/Scratchpad.cpp
     ${PS1_DIR}/BiosRom.cpp
     ${PS1_DIR}/Cdrom.cpp
+    ${PS1_DIR}/ControllerPort.cpp
     ${PS1_DIR}/Vram.cpp
     ${PS1_DIR}/Gpu.cpp
     ${PS1_DIR}/MemoryBus.cpp
