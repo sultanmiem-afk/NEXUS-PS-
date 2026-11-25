@@ -827,5 +827,19 @@ int main() {
     gpu.writeGp1(0x01000000u);
     assert(gpu.gp0FifoSize()==0u);
 
+    // Android display extraction: GP1 display enable/mode and RGB555 conversion.
+    gpu.reset();
+    vram.clear(0u);
+    vram.writePixel(0u, 0u, 0x001Fu);
+    gpu.writeGp1(0x03000000u);
+    gpu.writeGp1(0x08000000u);
+    std::vector<std::uint32_t> frame(640u * 512u, 0u);
+    std::uint32_t frameWidth = 0u, frameHeight = 0u;
+    assert(gpu.copyDisplayToRgba8888(frame.data(), frame.size(), frameWidth, frameHeight));
+    assert(frameWidth == 256u && frameHeight == 240u);
+    assert(frame[0] == 0xFFFF0000u);
+    assert(frame[1] == 0xFF000000u);
+    assert(!gpu.copyDisplayToRgba8888(frame.data(), 10u, frameWidth, frameHeight));
+
     return 0;
 }
