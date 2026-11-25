@@ -104,3 +104,27 @@ Java_com_sultanmiem_nexusps_MainActivity_nativeLoadDiscImage(
     }
     return gSystem->loadDiscImage(bytes) ? JNI_TRUE : JNI_FALSE;
 }
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_sultanmiem_nexusps_MainActivity_nativeLoadDiscCue(
+    JNIEnv* env, jobject, jstring cueText, jstring binFilename, jbyteArray image) {
+    if (cueText == nullptr || binFilename == nullptr || image == nullptr ||
+        gSystem == nullptr || !gSystem->memory().bios().loaded()) return JNI_FALSE;
+    const char* cueChars = env->GetStringUTFChars(cueText, nullptr);
+    if (cueChars == nullptr) return JNI_FALSE;
+    const char* filenameChars = env->GetStringUTFChars(binFilename, nullptr);
+    if (filenameChars == nullptr) {
+        env->ReleaseStringUTFChars(cueText, cueChars);
+        return JNI_FALSE;
+    }
+    const jsize length = env->GetArrayLength(image);
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));
+    env->GetByteArrayRegion(image, 0, length, reinterpret_cast<jbyte*>(bytes.data()));
+    const bool exception = env->ExceptionCheck();
+    if (exception) env->ExceptionClear();
+    const bool loaded = !exception && length >= 2048 &&
+        gSystem->loadDiscCue(cueChars, filenameChars, bytes);
+    env->ReleaseStringUTFChars(cueText, cueChars);
+    env->ReleaseStringUTFChars(binFilename, filenameChars);
+    return loaded ? JNI_TRUE : JNI_FALSE;
+}
