@@ -598,5 +598,60 @@ int main() {
         assert(cpu.state().gpr[6]==0x80000001u);
     }
 
+
+    // R3000A BLTZAL/BGEZAL write $ra even when their condition is false.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1] = 1u; // BLTZAL not taken
+        cpu.state().gpr[31] = 0xCAFEBABEu;
+        put(bus, 0, i_type(0x01, 1, 0x10, 3));
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().gpr[31] == 8u);
+        assert(cpu.state().next_pc == 8u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1] = 0x80000000u; // BGEZAL not taken
+        cpu.state().gpr[31] = 0xCAFEBABEu;
+        put(bus, 0, i_type(0x01, 1, 0x11, 3));
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().gpr[31] == 8u);
+        assert(cpu.state().next_pc == 8u);
+    }
+
+    // Unassigned REGIMM rt values alias BLTZ/BGEZ according to rt bit zero.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1] = 0xFFFFFFFFu;
+        put(bus, 0, i_type(0x01, 1, 2, 2)); // even rt -> BLTZ
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().next_pc == 12u);
+    }
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1] = 0u;
+        put(bus, 0, i_type(0x01, 1, 3, 2)); // odd rt -> BGEZ
+        assert(cpu.step().status == CpuStepStatus::Executed);
+        assert(cpu.state().next_pc == 12u);
+    }
+
+    // Status.IsC isolates data-cache stores: no store may leak into main RAM.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1] = 0x100u;
+        cpu.state().gpr[2] = 0xA1B2C3D4u;
+        assert(bus.write32(0x100u, 0x11223344u));
+        cpu.cop0().write(Cop0::kStatus, 1u << 16);
+        put(bus, 0, i_type(0x2B, 1, 2, 0)); // SW
+        put(bus, 4, i_type(0x28, 1, 2, 1)); // SB
+        put(bus, 8, i_type(0x29, 1, 2, 2)); // SH
+        put(bus, 12, i_type(0x2A, 1, 2, 0)); // SWL
+        put(bus, 16, i_type(0x2E, 1, 2, 0)); // SWR
+        for (int i = 0; i < 5; ++i)
+            assert(cpu.step().status == CpuStepStatus::Executed);
+        std::uint32_t unchanged = 0;
+        assert(bus.read32(0x100u, unchanged));
+        assert(unchanged == 0x11223344u);
+    }
     return 0;
 }
