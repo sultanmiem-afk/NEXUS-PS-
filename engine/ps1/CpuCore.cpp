@@ -59,7 +59,7 @@ CpuStepResult CpuCore::step() {
     result.instruction_pc = state_.pc;
 
     // Interrupts are sampled at instruction boundaries before fetching the next instruction.
-    if (cop0_.interruptPending()) {
+    if (cop0_.interruptPending() && !in_delay_slot_) {
         commit_pending_load();
         cop0_.enter_exception(state_, CpuException::Interrupt, state_.pc, in_delay_slot_);
         in_delay_slot_ = false;
@@ -127,8 +127,48 @@ CpuStepResult CpuCore::step() {
     };
 
     switch (ins.opcode()) {
-    case 0x00: // SPECIAL
-        switch (ins.function()) {
+    case 0x00: { // SPECIAL
+        const auto fn = ins.function();
+        const auto rsField = ins.rs();
+        const auto rtField = ins.rt();
+        const auto rdField = ins.rd();
+        const auto shamtField = ins.shift_amount();
+        bool malformed = false;
+        switch (fn) {
+        case 0x00: case 0x02: case 0x03: // SLL/SRL/SRA
+            malformed = rsField != 0u;
+            break;
+        case 0x04: case 0x06: case 0x07: // SLLV/SRLV/SRAV
+            malformed = shamtField != 0u;
+            break;
+        case 0x08: // JR
+            malformed = rtField != 0u || rdField != 0u || shamtField != 0u;
+            break;
+        case 0x09: // JALR
+            malformed = rtField != 0u || shamtField != 0u;
+            break;
+        case 0x10: case 0x12: // MFHI/MFLO
+            malformed = rsField != 0u || rtField != 0u || shamtField != 0u;
+            break;
+        case 0x11: case 0x13: // MTHI/MTLO
+            malformed = rtField != 0u || rdField != 0u || shamtField != 0u;
+            break;
+        case 0x18: case 0x19: case 0x1A: case 0x1B: // MULT/MULTU/DIV/DIVU
+            malformed = rdField != 0u || shamtField != 0u;
+            break;
+        case 0x20: case 0x21: case 0x22: case 0x23:
+        case 0x24: case 0x25: case 0x26: case 0x27:
+        case 0x2A: case 0x2B: // register ALU
+            malformed = shamtField != 0u;
+            break;
+        default:
+            break; // SYSCALL/BREAK carry a code field; other unknown functions trap below.
+        }
+        if (malformed) {
+            raise_exception(CpuException::ReservedInstruction);
+            break;
+        }
+        switch (fn) {
         case 0x00: write_reg(ins.rd(), rt << ins.shift_amount()); break; // SLL
         case 0x02: write_reg(ins.rd(), rt >> ins.shift_amount()); break; // SRL
         case 0x03: write_reg(ins.rd(), arithmetic_shift_right(rt, ins.shift_amount())); break; // SRA
@@ -210,6 +250,7 @@ CpuStepResult CpuCore::step() {
         default: raise_exception(CpuException::ReservedInstruction); break;
         }
         break;
+    }
 
     case 0x01: { // REGIMM: BLTZ / BGEZ / BLTZAL / BGEZAL
         const auto condition = ins.rt();
@@ -245,12 +286,18 @@ CpuStepResult CpuCore::step() {
         in_delay_slot_ = true;
         break;
     case 0x06: // BLEZ
-        if (static_cast<std::int32_t>(rs) <= 0) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
-        in_delay_slot_ = true;
+        if (ins.rt() != 0u) raise_exception(CpuException::ReservedInstruction);
+        else {
+            if (static_cast<std::int32_t>(rs) <= 0) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+            in_delay_slot_ = true;
+        }
         break;
     case 0x07: // BGTZ
-        if (static_cast<std::int32_t>(rs) > 0) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
-        in_delay_slot_ = true;
+        if (ins.rt() != 0u) raise_exception(CpuException::ReservedInstruction);
+        else {
+            if (static_cast<std::int32_t>(rs) > 0) branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+            in_delay_slot_ = true;
+        }
         break;
     case 0x08: {
         const auto sum = static_cast<std::int64_t>(static_cast<std::int32_t>(rs)) + imm;
@@ -265,7 +312,10 @@ CpuStepResult CpuCore::step() {
     case 0x0C: write_reg(ins.rt(), rs & uimm); break; // ANDI
     case 0x0D: write_reg(ins.rt(), rs | uimm); break; // ORI
     case 0x0E: write_reg(ins.rt(), rs ^ uimm); break; // XORI
-    case 0x0F: write_reg(ins.rt(), uimm << 16); break;
+    case 0x0F:
+        if (ins.rs() != 0u) raise_exception(CpuException::ReservedInstruction);
+        else write_reg(ins.rt(), uimm << 16);
+        break;
 
     case 0x10: { // COP0
         switch (ins.rs()) {
