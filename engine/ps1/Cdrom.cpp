@@ -153,7 +153,8 @@ std::size_t Cdrom::sectorCount() const noexcept {
 }
 
 bool Cdrom::irqPending() const noexcept {
-    return (interruptFlags_ & interruptEnable_ & 0x1Fu) != 0u;
+    return interruptFlags_ != 0u &&
+        (interruptEnable_ & (1u << (interruptFlags_ - 1u))) != 0u;
 }
 
 void Cdrom::pushResponse(std::uint8_t value) noexcept {
@@ -161,8 +162,7 @@ void Cdrom::pushResponse(std::uint8_t value) noexcept {
 }
 
 void Cdrom::raiseInterrupt(std::uint8_t code) noexcept {
-    if (code >= 1u && code <= 5u)
-        interruptFlags_ = static_cast<std::uint8_t>(interruptFlags_ | (1u << (code - 1u)));
+    if (code >= 1u && code <= 5u) interruptFlags_ = code;
 }
 
 std::uint8_t Cdrom::fromBcd(std::uint8_t value) noexcept {
@@ -327,13 +327,42 @@ void Cdrom::executeCommand(std::uint8_t command) noexcept {
         pushResponse(toBcd((absolute / 75u) % 60u));
         raiseInterrupt(kIrqCommand); break;
     }
-    case 0x15u: // SeekL: coarse immediate seek to last Setloc address
+    case 0x15u: // SeekL
+    case 0x16u: // SeekP
         if (!imageLoaded() || findTrack(currentLba_) == nullptr) {
-            pushResponse(0u); raiseInterrupt(kIrqError); break;
+            parameters_.clear(); pushResponse(0u); raiseInterrupt(kIrqError); break;
         }
         reading_ = false; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
         pushResponse(status()); raiseInterrupt(kIrqCommand); break;
+    case 0x19u: // Test
+        if (!parameters_.empty()) {
+            const std::uint8_t sub = parameters_.front();
+            parameters_.clear();
+            if (sub == 0x20u) {
+                pushResponse(0x98u); pushResponse(0x06u); pushResponse(0x10u); pushResponse(0xC3u);
+            } else {
+                pushResponse(0u);
+            }
+        } else pushResponse(0u);
+        raiseInterrupt(kIrqCommand); break;
+    case 0x1Au: // GetID
+        parameters_.clear();
+        pushResponse(status());
+        pushResponse(0x00u); // second response: licensed/valid disc
+        pushResponse(0x20u); // SCEA region/product family placeholder
+        pushResponse('S'); pushResponse('C'); pushResponse('E'); pushResponse('A');
+        raiseInterrupt(kIrqCommand);
+        raiseInterrupt(2u); // final GetID response interrupt (INT2)
+        break;
+    case 0x03u: // Play
+        parameters_.clear(); reading_ = true; cycleRemainder_ = 0;
+        pushResponse(status()); raiseInterrupt(kIrqCommand); break;
+    case 0x0Bu: // Mute
+    case 0x0Cu: // Demute
+        parameters_.clear(); pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     default:
+        // Unknown commands must not leak stale arguments into a later Setloc.
+        parameters_.clear();
         pushResponse(0x00u); raiseInterrupt(kIrqError); break;
     }
 }
@@ -342,20 +371,17 @@ bool Cdrom::read8(std::uint32_t address, std::uint8_t& value) noexcept {
     if (address < kBaseAddress || address > kBaseAddress + 3u) return false;
     const std::uint32_t reg = address - kBaseAddress;
     if (reg == 0u) {
-        value = static_cast<std::uint8_t>((parameters_.empty() ? 0x01u : 0u) |
-            (parameters_.size() < 16u ? 0x02u : 0u) |
-            (!responses_.empty() ? 0x04u : 0u) |
-            (!data_.empty() ? 0x08u : 0u) |
-            (reading_ ? 0x20u : 0u));
+        value = static_cast<std::uint8_t>((index_ & 0x03u) |
+            (parameters_.empty() ? 0x08u : 0u) |
+            (parameters_.size() < 16u ? 0x10u : 0u) |
+            (!responses_.empty() ? 0x20u : 0u) |
+            (!data_.empty() ? 0x40u : 0u) |
+            (reading_ ? 0x80u : 0u));
         return true;
     }
     if (reg == 1u) {
-        if (index_ == 1u) value = interruptEnable_;
-        else if (index_ == 2u) value = interruptFlags_;
-        else {
-            value = responses_.empty() ? 0u : responses_.front();
-            if (!responses_.empty()) responses_.pop_front();
-        }
+        value = responses_.empty() ? 0u : responses_.front();
+        if (!responses_.empty()) responses_.pop_front();
         return true;
     }
     if (reg == 2u) {
@@ -363,12 +389,10 @@ bool Cdrom::read8(std::uint32_t address, std::uint8_t& value) noexcept {
             value = data_.empty() ? 0u : data_.front();
             if (!data_.empty()) data_.pop_front();
             if (data_.empty()) dataReady_ = false;
-        } else {
-            value = mode_;
-        }
+        } else value = 0u;
         return true;
     }
-    value = index_ == 1u ? interruptFlags_ : interruptEnable_;
+    value = index_ == 1u ? interruptFlags_ : 0u;
     return true;
 }
 
@@ -382,26 +406,26 @@ bool Cdrom::write8(std::uint32_t address, std::uint8_t value) noexcept {
     if (reg == 1u) {
         if (index_ == 0u) executeCommand(value);
         else if (index_ == 1u) interruptEnable_ = static_cast<std::uint8_t>(value & 0x1Fu);
-        else if (index_ == 2u) mode_ = value;
+        // Index 2/3 writes are not aliases for Enable or Mode.
         return true;
     }
     if (reg == 2u) {
         if (index_ == 0u) {
             if (parameters_.size() < 16u) parameters_.push_back(value);
         } else if (index_ == 1u) {
-            interruptEnable_ = static_cast<std::uint8_t>(value & 0x1Fu);
-        } else if (index_ == 2u) {
-            mode_ = value;
+            request_ = value;
         }
         return true;
     }
     if (index_ == 0u) {
         request_ = value;
     } else if (index_ == 1u) {
-        interruptFlags_ = static_cast<std::uint8_t>(interruptFlags_ & ~(value & 0x1Fu));
+        // Acknowledge the currently latched interrupt number using its bit.
+        if (interruptFlags_ != 0u &&
+            (value & (1u << (interruptFlags_ - 1u))) != 0u)
+            interruptFlags_ = 0u;
     } else if (index_ == 2u) {
-        data_.clear();
-        dataReady_ = false;
+        // Audio volume register pair: never flush the data FIFO.
     }
     return true;
 }
