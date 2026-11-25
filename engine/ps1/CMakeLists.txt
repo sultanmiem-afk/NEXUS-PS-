@@ -9,6 +9,7 @@ add_library(nexus_ps1_cpu
     Scratchpad.cpp
     BiosRom.cpp
     Cdrom.cpp
+    ControllerPort.cpp
     Vram.cpp
     Gpu.cpp
     MemoryBus.cpp
