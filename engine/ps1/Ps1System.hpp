@@ -22,6 +22,12 @@ struct SystemStepResult {
     bool timer2Irq = false;
 };
 
+struct SystemRunResult {
+    std::uint64_t cyclesExecuted = 0;
+    std::uint64_t instructionsExecuted = 0;
+    SystemStepResult lastStep{};
+};
+
 // First machine-level integration: CPU-visible memory, GPU ports, VRAM and
 // synchronous channel-2 GPU DMA. Timing and the remaining peripherals are TODO.
 class Ps1System final {
@@ -35,6 +41,9 @@ public:
                      const std::vector<std::uint8_t>& binImage) noexcept;
 
     SystemStepResult step();
+    // Execute complete CPU instructions until at least the requested cycle budget is consumed.
+    // The final instruction may cross the budget boundary, as real instructions are indivisible.
+    SystemRunResult runForCycles(std::uint64_t cycleBudget);
     bool popAudioSample(Spu::StereoSample& sample) noexcept { return memory_.spu().popOutputSample(sample); }
     std::size_t queuedAudioSamples() const noexcept { return memory_.spu().queuedOutputSamples(); }
     static constexpr std::uint32_t kAudioSampleRate = 44100u;
