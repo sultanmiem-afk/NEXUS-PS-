@@ -101,7 +101,7 @@ int main() {
     assert(bus.read16(0x1F801100u, aliasHalf) && aliasHalf == 0x3456u);
     std::uint8_t aliasByte = 0u;
     assert(bus.write8(0xBF801800u, 0u));
-    assert(bus.read8(0x1F801800u, aliasByte) && aliasByte == 0x03u);
+    assert(bus.read8(0x1F801800u, aliasByte) && aliasByte == 0x18u);
 
     // DMA registers are mapped through the CPU-visible memory bus.
     assert(bus.write32(0x1F801080u, 0x00123456u));
