@@ -65,7 +65,7 @@ int main() {
         assert(bus.read32(address, word) && word == 0u);
     }
     word = 0xFFFFFFFFu;
-    assert(bus.read32(0x1F801044u, word) && word == 0u);
+    assert(bus.read32(0x1F801044u, word) && word == 0x5u);
 
     // BIOS startup probes are benign across both physical and KSEG1 aliases.
     const std::uint32_t benignAddresses[] = {
