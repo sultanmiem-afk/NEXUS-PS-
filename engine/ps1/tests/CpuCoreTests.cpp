@@ -544,7 +544,7 @@ int main() {
         assert(cpu.step().status==CpuStepStatus::Executed);
         assert(cpu.state().gpr[3]==52u);
     }
-    // A not-taken BLTZAL does not change the link register but still has a delay slot.
+    // A not-taken BLTZAL still writes the link register and has a delay slot.
     {
         TestBus bus; CpuCore cpu(bus); cpu.reset(0);
         cpu.state().gpr[1]=1u;
@@ -552,7 +552,7 @@ int main() {
         put(bus,0,i_type(0x01,1,0x10,3)); // BLTZAL r1, not taken
         put(bus,4,i_type(0x09,0,2,53));
         assert(cpu.step().status==CpuStepStatus::Executed);
-        assert(cpu.state().gpr[31]==0xCAFEBABEu);
+        assert(cpu.state().gpr[31]==8u);
         assert(cpu.state().pc==4u && cpu.state().next_pc==8u);
         assert(cpu.step().status==CpuStepStatus::Executed);
         assert(cpu.state().gpr[2]==53u);
@@ -578,7 +578,7 @@ int main() {
         put(bus,0,i_type(0x01,1,0x11,2)); // BGEZAL r1, not taken
         put(bus,4,i_type(0x09,0,2,56));
         assert(cpu.step().status==CpuStepStatus::Executed);
-        assert(cpu.state().gpr[31]==0x12345678u && cpu.state().next_pc==8u);
+        assert(cpu.state().gpr[31]==8u && cpu.state().next_pc==8u);
         assert(cpu.step().status==CpuStepStatus::Executed);
         assert(cpu.state().gpr[2]==56u);
     }
