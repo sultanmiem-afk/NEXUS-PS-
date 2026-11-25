@@ -2,6 +2,8 @@ package com.sultanmiem.nexusps
 
 import android.app.Activity
 import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
 import android.app.AlertDialog
 import android.content.Intent
@@ -32,6 +34,7 @@ class MainActivity : Activity() {
     private external fun nativeBiosLoaded(): Boolean
     private external fun nativeSetControllerButtons(pressedMask: Int)
     private val pressedControllerButtons = mutableSetOf<String>()
+    private val joystickDirections = mutableSetOf<String>()
 
     companion object {
         init { System.loadLibrary("nexus_ps1_android") }
@@ -68,7 +71,7 @@ class MainActivity : Activity() {
         }
         val controller = createTouchController(controllerStatus)
         val notice = TextView(this).apply {
-            text = "Touch controls now update the native PS1 digital controller through SIO0. Game execution, GPU display and audio output are still separate development tasks. Import copies files; originals are kept."
+            text = "Touch buttons and virtual joystick directions update the native PS1 digital controller through SIO0. Game execution, GPU display and audio output are still separate development tasks. Import copies files; originals are kept."
             textSize = 14f
             setPadding(0, 24, 0, 20)
         }
@@ -171,6 +174,10 @@ class MainActivity : Activity() {
         main.addView(face, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         panel.addView(main)
 
+        val joystickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, dp(4), 0, dp(8)) }
+        joystickRow.addView(createVirtualJoystick(statusLabel), LinearLayout.LayoutParams(dp(132), dp(132)))
+        panel.addView(joystickRow)
+
         val centerControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -181,6 +188,39 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(8), 0, dp(28), 0) })
         panel.addView(centerControls)
         return panel
+    }
+
+    private fun createVirtualJoystick(statusLabel: TextView): View {
+        val base = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(48, 57, 73) }
+        val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(103, 116, 139); style = Paint.Style.STROKE; strokeWidth = 5f }
+        val knob = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(75, 139, 180) }
+        val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(175, 210, 230); style = Paint.Style.STROKE; strokeWidth = 3f }
+        var axisX = 0f
+        var axisY = 0f
+        val view = object : View(this) {
+            override fun onDraw(canvas: Canvas) {
+                val cx = width / 2f; val cy = height / 2f; val r = minOf(width, height) * 0.43f
+                canvas.drawCircle(cx, cy, r, base); canvas.drawCircle(cx, cy, r, ring)
+                canvas.drawLine(cx-r*0.72f, cy, cx+r*0.72f, cy, ring); canvas.drawLine(cx, cy-r*0.72f, cx, cy+r*0.72f, ring)
+                canvas.drawCircle(cx+axisX*r*0.68f, cy+axisY*r*0.68f, r*0.34f, knob)
+                canvas.drawCircle(cx+axisX*r*0.68f, cy+axisY*r*0.68f, r*0.34f, edge)
+            }
+        }
+        fun update(x: Float, y: Float) {
+            val cx=view.width/2f; val cy=view.height/2f; val r=(minOf(view.width,view.height)*0.43f).coerceAtLeast(1f)
+            var dx=(x-cx)/r; var dy=(y-cy)/r; val length=kotlin.math.sqrt(dx*dx+dy*dy)
+            if (length>1f) { dx/=length; dy/=length }; axisX=dx; axisY=dy
+            val next=mutableSetOf<String>(); val dead=0.38f
+            if(dy < -dead) next.add("↑"); if(dy > dead) next.add("↓"); if(dx < -dead) next.add("←"); if(dx > dead) next.add("→")
+            if(next != joystickDirections) { joystickDirections.clear(); joystickDirections.addAll(next); sendControllerState(statusLabel) }
+            view.invalidate()
+        }
+        view.setOnTouchListener { _, event -> when(event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_POINTER_DOWN -> { update(event.x,event.y); true }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_UP -> { axisX=0f; axisY=0f; joystickDirections.clear(); sendControllerState(statusLabel); view.invalidate(); true }
+            else -> true
+        } }
+        return view
     }
 
     private fun controllerButtonMask(label: String): Int = when (label) {
@@ -203,13 +243,14 @@ class MainActivity : Activity() {
 
     private fun updateControllerButton(label: String, pressed: Boolean, statusLabel: TextView) {
         if (pressed) pressedControllerButtons.add(label) else pressedControllerButtons.remove(label)
-        val mask = pressedControllerButtons.fold(0) { acc, name -> acc or controllerButtonMask(name) }
+        sendControllerState(statusLabel)
+    }
+
+    private fun sendControllerState(statusLabel: TextView) {
+        val allPressed = pressedControllerButtons + joystickDirections
+        val mask = allPressed.fold(0) { acc, name -> acc or controllerButtonMask(name) }
         nativeSetControllerButtons(mask)
-        statusLabel.text = if (pressedControllerButtons.isEmpty()) {
-            "Controller: connected to PS1 digital pad"
-        } else {
-            "Pressed: " + pressedControllerButtons.joinToString(" + ")
-        }
+        statusLabel.text = if (allPressed.isEmpty()) "Controller: connected • joystick centered" else "Pressed: " + allPressed.joinToString(" + ")
     }
 
     private fun loadBiosIntoCore(uri: Uri): Boolean {
