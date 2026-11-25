@@ -3,6 +3,7 @@
 #include "Ps1System.hpp"
 
 #include <cstdint>
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -142,22 +143,25 @@ extern "C" JNIEXPORT jintArray JNICALL
 Java_com_sultanmiem_nexusps_MainActivity_nativeCopyDisplayFrame(
     JNIEnv* env, jobject) {
     std::lock_guard<std::mutex> lock(gSystemMutex);
-    constexpr jint kWidth = 640;
-    constexpr jint kHeight = 512;
-    constexpr jsize kHeader = 2;
-    constexpr jsize kPixels = kWidth * kHeight;
+    constexpr jint kMaxWidth = 640;
+    constexpr jint kMaxHeight = 512;
     if (gSystem == nullptr) return env->NewIntArray(0);
 
-    std::vector<std::uint32_t> pixels(static_cast<std::size_t>(kPixels));
+    std::vector<std::uint32_t> pixels(static_cast<std::size_t>(kMaxWidth) * kMaxHeight);
     std::uint32_t width = 0, height = 0;
     if (!gSystem->gpu().copyDisplayToRgba8888(
             pixels.data(), pixels.size(), width, height)) return env->NewIntArray(0);
 
-    jintArray result = env->NewIntArray(kHeader + kPixels);
+    const jsize pixelCount = static_cast<jsize>(width * height);
+    jintArray result = env->NewIntArray(2 + pixelCount);
     if (result == nullptr) return nullptr;
-    const jint header[kHeader] = {static_cast<jint>(width), static_cast<jint>(height)};
-    env->SetIntArrayRegion(result, 0, kHeader, header);
-    env->SetIntArrayRegion(result, kHeader, kPixels,
-        reinterpret_cast<const jint*>(pixels.data()));
+    const jint header[2] = {static_cast<jint>(width), static_cast<jint>(height)};
+    env->SetIntArrayRegion(result, 0, 2, header);
+    std::vector<jint> packed(static_cast<std::size_t>(pixelCount));
+    for (std::uint32_t y = 0; y < height; ++y) {
+        const auto* row = pixels.data() + static_cast<std::size_t>(y) * kMaxWidth;
+        std::copy(row, row + width, packed.data() + static_cast<std::size_t>(y) * width);
+    }
+    env->SetIntArrayRegion(result, 2, pixelCount, packed.data());
     return result;
 }
