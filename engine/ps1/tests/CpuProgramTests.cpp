@@ -99,7 +99,7 @@ int main() {
     std::uint32_t ramWord = 0;
     assert(system.memory().ram().read32(0x100u, ramWord) && ramWord == 0x1234u);
     std::uint32_t scratchWord = 0;
-    assert(system.memory().scratchpad().read32(0u, scratchWord) && scratchWord == 0x5A5Au);
+    assert(system.memory().scratchpad().read32(0x1F800000u, scratchWord) && scratchWord == 0x5A5Au);
 
     // Real instruction streams exercise exception entry from the CPU decoder.
     assertException(system, {0x0000000Cu}, CpuException::Syscall);
