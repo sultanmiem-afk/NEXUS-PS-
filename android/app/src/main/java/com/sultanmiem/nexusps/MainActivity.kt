@@ -41,7 +41,7 @@ class MainActivity : Activity() {
         biosInfo = TextView(this).apply { text = "BIOS: not selected" }
         discInfo = TextView(this).apply { text = "Disc: not selected" }
         folderInfo = TextView(this).apply { text = "Games folder: not selected" }
-        val biosButton = Button(this).apply { text = "Choose BIOS"; setOnClickListener { explainFileAccess(pickBios, "application/octet-stream") } }
+        val biosButton = Button(this).apply { text = "Choose BIOS (any file type)"; setOnClickListener { explainFileAccess(pickBios, "*/*") } }
         val discButton = Button(this).apply { text = "Choose game (CUE or BIN)"; setOnClickListener { explainFileAccess(pickDisc, "*/*") } }
         val folderButton = Button(this).apply { text = "Create / choose games folder"; setOnClickListener { chooseGamesFolder() } }
         val importButton = Button(this).apply { text = "Copy games into NEXUS-PS folder"; setOnClickListener { chooseGamesToImport() } }
