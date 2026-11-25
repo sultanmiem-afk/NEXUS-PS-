@@ -88,7 +88,13 @@ class MainActivity : Activity() {
         displayHandler.post(displayRefresh)
         emulationThread = Thread {
             while (emulationRunning && !Thread.currentThread().isInterrupted) {
-                try { nativeRunForCycles(564_480L); Thread.sleep(1L) }
+                try {
+                    val frameStart = System.nanoTime()
+                    nativeRunForCycles(564_480L)
+                    val elapsedMs = (System.nanoTime() - frameStart) / 1_000_000L
+                    val waitMs = (16L - elapsedMs).coerceAtLeast(0L)
+                    if (waitMs > 0L) Thread.sleep(waitMs)
+                }
                 catch (_: InterruptedException) { break }
                 catch (e: Exception) {
                     emulationRunning = false
