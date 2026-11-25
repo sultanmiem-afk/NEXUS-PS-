@@ -64,7 +64,7 @@ void ControllerPort::writeData(std::uint8_t value) noexcept {
 
     switch (pollPhase_) {
         case 1:
-            queueResponse(value == 0x42u ? 0x41u : 0xFFu);
+            queueResponse(value == 0x42u ? (analogMode_ ? 0x73u : 0x41u) : 0xFFu);
             pollPhase_ = 2;
             break;
         case 2:
