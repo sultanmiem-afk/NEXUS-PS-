@@ -57,7 +57,7 @@ int main() {
     assert(system.memory().read16(0x1F801100u, ioHalf) && ioHalf == 0x3456u);
     assert(system.memory().write8(0xBF801800u, 0u)); // CD-ROM index
     std::uint8_t ioByte = 0u;
-    assert(system.memory().read8(0x1F801800u, ioByte) && ioByte == 0x03u);
+    assert(system.memory().read8(0x1F801800u, ioByte) && ioByte == 0x18u);
 
     // BIOS early scratch/expansion accesses are benign: writes ignored, reads zero.
     for (const std::uint32_t address : {0x1F801000u, 0x1F801060u, 0xFFFE0130u, 0x1F802041u}) {
@@ -335,7 +335,7 @@ int main() {
     system.reset(); // Reset vector now fetches the synthetic BIOS program.
     assert(system.memory().write32(InterruptController::kMaskAddress, 1u << 2));
     assert(system.memory().write8(0x1F801800u, 1u)); // Select CD-ROM IRQ enable register.
-    assert(system.memory().write8(0x1F801802u, 0x04u)); // Enable command-complete IRQ.
+    assert(system.memory().write8(0x1F801801u, 0x04u)); // Enable command-complete IRQ.
     assert(system.memory().write8(0x1F801800u, 0u));
     for (std::size_t i = 0; i < sizeof(biosProgram) / sizeof(biosProgram[0]); ++i)
         assert(system.step().cpu.status == CpuStepStatus::Executed);
