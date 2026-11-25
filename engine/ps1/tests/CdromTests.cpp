@@ -251,10 +251,11 @@ int main() {
     idCdrom.write8(0x1F801801u, 0x1Fu);
     idCdrom.write8(0x1F801800u, 0u);
     idCdrom.write8(0x1F801801u, 0x1Au);
-    assert(idCdrom.interruptFlags() == 2u);
+    assert(idCdrom.interruptFlags() == 3u); // first response is INT3
     assert(idCdrom.irqPending());
     std::uint8_t idByte = 0;
     for (unsigned i = 0; i < 6u; ++i) assert(idCdrom.read8(0x1F801801u, idByte));
+    assert(idCdrom.interruptFlags() == 2u); // final response transitions to INT2
 
     // Unsupported command discards all stale parameters before a later Setloc.
     Cdrom badCommandCdrom;
