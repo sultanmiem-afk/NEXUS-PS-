@@ -59,6 +59,7 @@ private:
     std::uint32_t currentLba_ = 0;
     std::uint32_t cycleRemainder_ = 0;
     bool reading_ = false;
+    bool motorOn_ = false;
     bool dataReady_ = false;
     std::deque<std::uint8_t> parameters_{};
     std::deque<std::uint8_t> responses_{};
