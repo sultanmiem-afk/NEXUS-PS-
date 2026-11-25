@@ -271,22 +271,51 @@ class MainActivity : Activity() {
         statusLabel.text = if (pressedControllerButtons.isEmpty()) "DualShock analog controller connected" else "Pressed: " + pressedControllerButtons.joinToString(" + ")
     }
 
-    private fun loadBiosIntoCore(uri: Uri): Boolean {
-        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return false
-        return nativeLoadBios(bytes) && nativeBiosLoaded()
+    private fun readBiosBytes(uri: Uri): ByteArray? =
+        contentResolver.openInputStream(uri)?.use { it.readBytes() }
+
+    private fun loadBiosIntoCore(bytes: ByteArray): Boolean =
+        nativeLoadBios(bytes) && nativeBiosLoaded()
+
+    private fun validateBios(bytes: ByteArray): String? {
+        val expectedSize = 512 * 1024
+        if (bytes.size != expectedSize) {
+            return "Invalid BIOS size: ${bytes.size} bytes. Expected exactly 524,288 bytes (512 KiB)."
+        }
+        if (bytes.all { it == 0.toByte() } || bytes.all { (it.toInt() and 0xFF) == 0xFF }) {
+            return "The file contains only repeated empty data and does not look like a BIOS image."
+        }
+        return null
+    }
+
+    private fun detectBiosRegion(bytes: ByteArray): String {
+        // PS1 BIOS ROMs commonly include a human-readable region string.
+        // If a revision omits it, report Unknown rather than guessing from the filename.
+        val romText = String(bytes, Charsets.ISO_8859_1).uppercase()
+        val markers = listOf(
+            "FOR JAPAN AREA" to "Japan (NTSC-J)",
+            "FOR U/C AREA" to "North America (NTSC-U/C)",
+            "FOR EUROPE AREA" to "Europe (PAL)",
+            "FOR ASIA AREA" to "Asia",
+            "FOR CHINA AREA" to "China"
+        )
+        return markers.firstOrNull { romText.contains(it.first) }?.second
+            ?: "Unknown region"
     }
 
     private fun restoreSavedBios() {
         val saved = prefs.getString("bios_uri", null) ?: return
         val uri = Uri.parse(saved)
         try {
-            val error = validateBios(uri)
-            if (error != null || !loadBiosIntoCore(uri)) {
+            val bytes = readBiosBytes(uri)
+            val error = if (bytes == null) "Android could not read the saved BIOS file." else validateBios(bytes)
+            if (error != null || bytes == null || !loadBiosIntoCore(bytes)) {
                 biosInfo.text = "BIOS: saved file unavailable or failed to load"
                 status.text = error ?: "Could not load saved BIOS into native core"
             } else {
-                biosInfo.text = "BIOS: loaded into native PS1 core"
-                status.text = "BIOS loaded • PS1 boot screen is not started"
+                val region = detectBiosRegion(bytes)
+                biosInfo.text = "BIOS: $region"
+                status.text = "BIOS loaded • Region: $region • PS1 boot screen is not started"
             }
         } catch (e: Exception) {
             biosInfo.text = "BIOS: saved file unavailable"
@@ -307,46 +336,6 @@ class MainActivity : Activity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         startActivityForResult(intent, requestCode)
-    }
-
-    private fun validateBios(uri: Uri): String? {
-        val expectedSize = 512L * 1024L
-        val descriptor = contentResolver.openAssetFileDescriptor(uri, "r")
-        descriptor?.use {
-            if (it.length >= 0L && it.length != expectedSize) {
-                return "Invalid BIOS size: ${it.length} bytes. A PS1 BIOS must be exactly 524,288 bytes (512 KiB)."
-            }
-        }
-
-        val input = contentResolver.openInputStream(uri)
-            ?: return "Android could not read this file."
-        input.use { stream ->
-            val buffer = ByteArray(8192)
-            var total = 0L
-            var allZero = true
-            var allFF = true
-            while (true) {
-                val count = stream.read(buffer)
-                if (count < 0) break
-                if (count == 0) continue
-                total += count
-                if (total > expectedSize) {
-                    return "This file is larger than 512 KiB, so it is not a supported PS1 BIOS image."
-                }
-                for (i in 0 until count) {
-                    val value = buffer[i].toInt() and 0xFF
-                    if (value != 0) allZero = false
-                    if (value != 0xFF) allFF = false
-                }
-            }
-            if (total != expectedSize) {
-                return "Invalid BIOS size: $total bytes. Expected exactly 524,288 bytes (512 KiB)."
-            }
-            if (allZero || allFF) {
-                return "The file contains only repeated empty data and does not look like a BIOS image."
-            }
-        }
-        return null
     }
 
     private fun chooseGamesFolder() {
@@ -452,9 +441,11 @@ class MainActivity : Activity() {
         when (requestCode) {
             pickBios -> {
                 status.text = "Checking BIOS file..."
-                val error = try { validateBios(uri) } catch (e: Exception) {
-                    e.message ?: "Could not inspect this file."
+                val bytes = try { readBiosBytes(uri) } catch (e: Exception) {
+                    status.text = e.message ?: "Could not read this file."
+                    null
                 }
+                val error = if (bytes == null) "Android could not read this file." else validateBios(bytes)
                 if (error != null) {
                     prefs.edit().remove("bios_uri").apply()
                     biosInfo.text = "BIOS: invalid file"
@@ -463,11 +454,12 @@ class MainActivity : Activity() {
                         .setMessage(error)
                         .setPositiveButton("OK", null).show()
                 } else {
-                    val loaded = try { loadBiosIntoCore(uri) } catch (_: Exception) { false }
-                    if (loaded) {
+                    val loaded = try { bytes != null && loadBiosIntoCore(bytes) } catch (_: Exception) { false }
+                    if (loaded && bytes != null) {
+                        val region = detectBiosRegion(bytes)
                         prefs.edit().putString("bios_uri", uri.toString()).apply()
-                        biosInfo.text = "BIOS loaded: $name (512 KiB)"
-                        status.text = "BIOS is loaded inside the native PS1 core"
+                        biosInfo.text = "BIOS: $region • $name"
+                        status.text = "BIOS loaded successfully • Region: $region"
                     } else {
                         prefs.edit().remove("bios_uri").apply()
                         biosInfo.text = "BIOS: validated but native loading failed"
