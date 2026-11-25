@@ -126,6 +126,23 @@ int main() {
     assert(bus.write32(0x1F801114u, 0u));
     assert(bus.read32(0x1F801110u, word) && word == 0u);
 
+    // SIO0 digital controller poll: 0x01, 0x42 returns ID and active-low buttons.
+    bus.controller().setButtons(static_cast<std::uint16_t>((1u << 0u) | (1u << 4u) | (1u << 15u)));
+    assert(bus.write16(0x1F80104Au, 0x0002u)); // select controller port
+    assert(bus.write8(0x1F801040u, 0x01u));
+    assert(bus.read32(0x1F801044u, word) && (word & 0x02u) != 0u);
+    assert(bus.read8(0x1F801040u, byte) && byte == 0xFFu);
+    assert(bus.write8(0x1F801040u, 0x42u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 0x41u);
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 0x5Au);
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 0xEEu);
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 0x7Fu);
+    assert(bus.read32(0x1F801044u, word) && (word & 0x02u) == 0u);
+    assert(bus.write16(0x1F80104Au, 0x0000u));
+
     // Alignment rules apply to halfword and word accesses.
     std::uint16_t half = 0;
     assert(!bus.read16(0x1F800001u, half));
