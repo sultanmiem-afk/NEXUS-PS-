@@ -30,6 +30,10 @@ if(NEXUS_PS1_BUILD_TESTS)
     target_link_libraries(nexus_ps1_cpu_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_cpu_tests COMMAND nexus_ps1_cpu_tests)
 
+    add_executable(nexus_ps1_cpu_program_tests tests/CpuProgramTests.cpp)
+    target_link_libraries(nexus_ps1_cpu_program_tests PRIVATE nexus_ps1_cpu)
+    add_test(NAME nexus_ps1_cpu_program_tests COMMAND nexus_ps1_cpu_program_tests)
+
     add_executable(nexus_ps1_ram_tests tests/RamTests.cpp)
     target_link_libraries(nexus_ps1_ram_tests PRIVATE nexus_ps1_cpu)
     add_test(NAME nexus_ps1_ram_tests COMMAND nexus_ps1_ram_tests)
