@@ -71,6 +71,9 @@ public:
     std::uint32_t readGp0();
     void writeGp1(std::uint32_t value) noexcept;
     std::uint32_t readStatus() const noexcept;
+    // Copies the active VRAM display area into a tightly packed RGBA8888 frame.
+    bool copyDisplayToRgba8888(std::uint32_t* destination, std::size_t capacity,
+                               std::uint32_t& width, std::uint32_t& height) const noexcept;
     // Approximate display timing driven by CPU-cycle estimates (NTSC-like ratio).
     GpuTimingEvents advanceTiming(std::uint32_t cpuCycles) noexcept;
 
