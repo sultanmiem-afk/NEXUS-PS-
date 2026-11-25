@@ -254,7 +254,7 @@ int main() {
     assert(idCdrom.interruptFlags() == 3u); // first response is INT3
     assert(idCdrom.irqPending());
     std::uint8_t idByte = 0;
-    for (unsigned i = 0; i < 6u; ++i) assert(idCdrom.read8(0x1F801801u, idByte));
+    for (unsigned i = 0; i < 7u; ++i) assert(idCdrom.read8(0x1F801801u, idByte));
     assert(idCdrom.interruptFlags() == 2u); // final response transitions to INT2
 
     // Unsupported command discards all stale parameters before a later Setloc.
