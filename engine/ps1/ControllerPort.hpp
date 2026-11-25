@@ -11,6 +11,8 @@ class ControllerPort final {
 public:
     void reset() noexcept;
     void setButtons(std::uint16_t pressed) noexcept { buttons_ = pressed; }
+    void setAnalogMode(bool enabled) noexcept { analogMode_ = enabled; }
+    void setAnalogAxes(std::uint8_t x, std::uint8_t y) noexcept { analogX_ = x; analogY_ = y; }
 
     std::uint8_t readData() noexcept;
     std::uint32_t readStatus() const noexcept;
@@ -34,6 +36,9 @@ private:
     std::uint16_t baud_ = 0;
     std::uint8_t pollPhase_ = 0;
     bool polling_ = false;
+    bool analogMode_ = false;
+    std::uint8_t analogX_ = 128;
+    std::uint8_t analogY_ = 128;
 };
 
 } // namespace nexus::ps1
