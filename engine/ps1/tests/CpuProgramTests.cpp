@@ -80,7 +80,7 @@ int main() {
         0x00000000u                          // NOP
     };
     loadProgram(system, program);
-    run(system, static_cast<unsigned>(program.size()));
+    run(system, 29u); // 22 instructions through the jump delay slot + 7 at the target
 
     const auto& cpu = system.cpu().state();
     assert(cpu.gpr[2] == 0x1234u);
