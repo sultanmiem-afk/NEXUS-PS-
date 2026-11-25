@@ -704,8 +704,8 @@ int main() {
         cpu.cop0().write(Cop0::kStatus, 1u | (1u << 10));
         put(bus, 0, i_type(0x04, 0, 0, 2)); // BEQ r0, r0, +2
         put(bus, 4, i_type(0x09, 0, 2, 0x66)); // delay slot
-        cpu.cop0().setHardwareInterruptPending(true);
         assert(cpu.step().status == CpuStepStatus::Executed);
+        cpu.cop0().setHardwareInterruptPending(true);
         assert(cpu.step().status == CpuStepStatus::Executed);
         assert(cpu.state().gpr[2] == 0x66u);
         assert(cpu.step().status == CpuStepStatus::ExceptionTaken);
