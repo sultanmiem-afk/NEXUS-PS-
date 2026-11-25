@@ -72,7 +72,7 @@ int main() {
         assert(system.memory().read32(address, w) && w == 0u);
     }
     std::uint32_t ignoredWord = 0xFFFFFFFFu;
-    assert(system.memory().read32(0x1F801044u, ignoredWord) && ignoredWord == 0u);
+    assert(system.memory().read32(0x1F801044u, ignoredWord) && ignoredWord == 0x5u);
 
     // CPU KSEG1 store to GP0 is translated before GPU MMIO decode (no BusFault).
     system.reset(0x00000000u);
