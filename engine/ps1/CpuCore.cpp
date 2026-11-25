@@ -110,6 +110,7 @@ CpuStepResult CpuCore::step() {
     state_.next_pc += 4u;
     in_delay_slot_ = false;
 
+    const bool cache_isolated = (cop0_.read(Cop0::kStatus) & (1u << 16)) != 0u;
     auto load_address = [&](std::uint32_t address, std::uint32_t& value) -> bool {
         if ((address & 3u) != 0) {
             raise_exception(CpuException::AddressLoad, address);
@@ -210,37 +211,16 @@ CpuStepResult CpuCore::step() {
     case 0x01: { // REGIMM: BLTZ / BGEZ / BLTZAL / BGEZAL
         const auto condition = ins.rt();
         const bool negative = static_cast<std::int32_t>(rs) < 0;
-        bool taken = false;
-        bool link = false;
+        const bool taken = (condition & 1u) != 0u ? !negative : negative;
+        // R3000A treats the REGIMM link encodings as branch-and-link regardless
+        // of the branch condition. Other rt values alias BLTZ/BGEZ by bit 0.
+        const bool link = condition == 0x10u || condition == 0x11u;
 
-        switch (condition) {
-        case 0x00u: // BLTZ
-            taken = negative;
-            break;
-        case 0x01u: // BGEZ
-            taken = !negative;
-            break;
-        case 0x10u: // BLTZAL
-            taken = negative;
-            link = true;
-            break;
-        case 0x11u: // BGEZAL
-            taken = !negative;
-            link = true;
-            break;
-        default:
-            raise_exception(CpuException::ReservedInstruction);
-            break;
-        }
-
-        if (result.status != CpuStepStatus::ExceptionTaken) {
-            if (taken) {
-                if (link) write_reg(31, state_.pc + 4u);
-                branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
-            }
-            // REGIMM branches execute one delay-slot instruction whether taken or not.
-            in_delay_slot_ = true;
-        }
+        if (link) write_reg(31, state_.pc + 4u);
+        if (taken)
+            branch(state_.pc + (static_cast<std::uint32_t>(imm) << 2));
+        // REGIMM branches execute one delay-slot instruction whether taken or not.
+        in_delay_slot_ = true;
         break;
     }
 
@@ -353,6 +333,7 @@ CpuStepResult CpuCore::step() {
     case 0x24: { std::uint8_t v = 0; if (bus_.read8(rs + static_cast<std::uint32_t>(imm), v)) schedule_load(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LBU
     case 0x25: { const auto a = rs + static_cast<std::uint32_t>(imm); std::uint16_t v = 0; if (a & 1u) raise_exception(CpuException::AddressLoad, a); else if (bus_.read16(a, v)) schedule_load(ins.rt(), v); else result.status = CpuStepStatus::BusFault; break; } // LHU
     case 0x2A: { // SWL — little-endian left word merge
+        if (cache_isolated) break;
         const auto address = rs + static_cast<std::uint32_t>(imm);
         const auto aligned = address & ~3u;
         std::uint32_t memory = 0;
@@ -366,6 +347,7 @@ CpuStepResult CpuCore::step() {
         break;
     }
     case 0x2E: { // SWR — little-endian right word merge
+        if (cache_isolated) break;
         const auto address = rs + static_cast<std::uint32_t>(imm);
         const auto aligned = address & ~3u;
         std::uint32_t memory = 0;
@@ -378,9 +360,9 @@ CpuStepResult CpuCore::step() {
         }
         break;
     }
-    case 0x28: if (!bus_.write8(rs + static_cast<std::uint32_t>(imm), static_cast<std::uint8_t>(rt))) result.status = CpuStepStatus::BusFault; break;
-    case 0x29: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 1u) raise_exception(CpuException::AddressStore, a); else if (!bus_.write16(a, static_cast<std::uint16_t>(rt))) result.status = CpuStepStatus::BusFault; break; }
-    case 0x2B: { const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 3u) raise_exception(CpuException::AddressStore, a); else if (!bus_.write32(a, rt)) result.status = CpuStepStatus::BusFault; break; }
+    case 0x28: if (cache_isolated) break; else if (!bus_.write8(rs + static_cast<std::uint32_t>(imm), static_cast<std::uint8_t>(rt))) result.status = CpuStepStatus::BusFault; break;
+    case 0x29: { if (cache_isolated) break; const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 1u) raise_exception(CpuException::AddressStore, a); else if (!bus_.write16(a, static_cast<std::uint16_t>(rt))) result.status = CpuStepStatus::BusFault; break; }
+    case 0x2B: { if (cache_isolated) break; const auto a = rs + static_cast<std::uint32_t>(imm); if (a & 3u) raise_exception(CpuException::AddressStore, a); else if (!bus_.write32(a, rt)) result.status = CpuStepStatus::BusFault; break; }
     default:
         raise_exception(CpuException::ReservedInstruction);
         break;
