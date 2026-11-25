@@ -5,8 +5,8 @@
 
 namespace nexus::ps1 {
 
-// Minimal digital-pad SIO0 endpoint. Button bits are logical pressed-state
-// bits; the serial protocol reports the PS1's active-low button bytes.
+// PS1 SIO0 digital/analog controller endpoint. Button bits are logical
+// pressed-state bits; serial button bytes are active-low.
 class ControllerPort final {
 public:
     void reset() noexcept;
