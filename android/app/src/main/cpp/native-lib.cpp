@@ -56,6 +56,14 @@ Java_com_sultanmiem_nexusps_MainActivity_nativeBiosLoaded(JNIEnv*, jobject) {
         ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_sultanmiem_nexusps_MainActivity_nativeRunForCycles(
+    JNIEnv*, jobject, jlong cycleBudget) {
+    if (gSystem == nullptr || cycleBudget <= 0) return 0;
+    const auto result = gSystem->runForCycles(static_cast<std::uint64_t>(cycleBudget));
+    return static_cast<jlong>(result.cyclesExecuted);
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_sultanmiem_nexusps_MainActivity_nativeSetControllerButtons(
     JNIEnv*, jobject, jint pressedMask) {
