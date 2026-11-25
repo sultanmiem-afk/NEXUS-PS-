@@ -104,8 +104,13 @@ int main() {
     // Real instruction streams exercise exception entry from the CPU decoder.
     assertException(system, {0x0000000Cu}, CpuException::Syscall);
     assertException(system, {0x0000000Du}, CpuException::Breakpoint);
-    assertException(system, {iType(0x08, 1, 2, 1)}, CpuException::ArithmeticOverflow);
     assertException(system, {0xFFFFFFFFu}, CpuException::ReservedInstruction);
+    system.reset(0u);
+    system.cpu().state().gpr[1] = 0x7FFFFFFFu;
+    loadProgram(system, {iType(0x08, 1, 2, 1)}); // ADDI overflows signed 32-bit range
+    assert(system.step().cpu.status == CpuStepStatus::ExceptionTaken);
+    assert(((system.cpu().cop0().read(Cop0::kCause) >> 2u) & 0x1Fu) ==
+           static_cast<std::uint32_t>(CpuException::ArithmeticOverflow));
 
     // Unmapped data read is a DBE from a running program, not a mocked bus callback.
     system.reset(0u);
