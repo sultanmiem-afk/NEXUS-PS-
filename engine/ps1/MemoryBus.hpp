@@ -2,6 +2,7 @@
 
 #include "BiosRom.hpp"
 #include "Cdrom.hpp"
+#include "ControllerPort.hpp"
 #include "CpuCore.hpp"
 #include "DmaController.hpp"
 #include "InterruptController.hpp"
@@ -36,6 +37,8 @@ public:
     const InterruptController& interrupts() const noexcept { return interrupts_; }
     Spu& spu() noexcept { return spu_; }
     const Spu& spu() const noexcept { return spu_; }
+    ControllerPort& controller() noexcept { return controller_; }
+    const ControllerPort& controller() const noexcept { return controller_; }
     Cdrom& cdrom() noexcept { return cdrom_; }
     const Cdrom& cdrom() const noexcept { return cdrom_; }
     BiosRom& bios() noexcept { return bios_; }
@@ -54,6 +57,7 @@ private:
     Ram ram_{};
     Scratchpad scratchpad_{};
     BiosRom bios_{};
+    ControllerPort controller_{};
     Cdrom cdrom_{};
     Spu spu_{};
     DmaController dma_{};
