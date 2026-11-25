@@ -21,6 +21,8 @@ void Ps1System::reset(std::uint32_t resetVector) noexcept {
     gpu_.reset();
     cpu_.reset(resetVector);
     audioSamplePhase_ = 0;
+    cdromIrqLinePrevious_ = false;
+    dmaIrqLinePrevious_ = false;
 }
 
 bool Ps1System::loadBios(const std::vector<std::uint8_t>& image) noexcept {
@@ -66,8 +68,10 @@ SystemStepResult Ps1System::step() {
         memory_.interrupts().request(1u << 5); // I_STAT Timer 1 source
     if (result.timer2Irq)
         memory_.interrupts().request(1u << 6); // I_STAT Timer 2 source
-    if (memory_.cdrom().irqPending())
-        memory_.interrupts().request(1u << 2); // I_STAT CD-ROM source
+    const bool cdromIrqLine = memory_.cdrom().irqPending();
+    if (cdromIrqLine && !cdromIrqLinePrevious_)
+        memory_.interrupts().request(1u << 2); // CD-ROM IRQ rising edge
+    cdromIrqLinePrevious_ = cdromIrqLine;
     result.cdromDmaTransferred = memory_.dma().executeCdromTransfer(
         memory_.ram(), memory_.cdrom());
     if (result.cdromDmaTransferred)
@@ -75,8 +79,10 @@ SystemStepResult Ps1System::step() {
     result.dmaTransferred = memory_.dma().executeGpuTransfer(memory_.ram(), gpu_);
     if (result.dmaTransferred)
         result.dmaWords = memory_.dma().lastTransferWords();
-    if (memory_.dma().irqPending())
-        memory_.interrupts().request(1u << 3); // I_STAT DMA source
+    const bool dmaIrqLine = memory_.dma().irqPending();
+    if (dmaIrqLine && !dmaIrqLinePrevious_)
+        memory_.interrupts().request(1u << 3); // DMA IRQ rising edge
+    dmaIrqLinePrevious_ = dmaIrqLine;
 
     // 44.1 kHz sample clock derived from the modeled 33.8688 MHz PS1 CPU clock.
     // The fractional phase is retained so samples are emitted at a stable average rate.
