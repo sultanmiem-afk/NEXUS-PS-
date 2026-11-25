@@ -2,6 +2,7 @@ package com.sultanmiem.nexusps
 
 import android.app.Activity
 import android.graphics.Color
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
@@ -9,11 +10,14 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -24,6 +28,11 @@ class MainActivity : Activity() {
     private lateinit var biosInfo: TextView
     private lateinit var discInfo: TextView
     private lateinit var folderInfo: TextView
+    private lateinit var displayImage: ImageView
+    private var displayBitmap: Bitmap? = null
+    @Volatile private var emulationRunning = false
+    private var emulationThread: Thread? = null
+    private val displayHandler = Handler(Looper.getMainLooper())
     private val pickBios = 10
     private val pickDisc = 11
     private val pickFolder = 12
@@ -35,11 +44,68 @@ class MainActivity : Activity() {
     private external fun nativeLoadDiscCue(cueText: String, binFilename: String, image: ByteArray): Boolean
     private external fun nativeBiosLoaded(): Boolean
     private external fun nativeRunForCycles(cycleBudget: Long): Long
+    private external fun nativeCopyDisplayFrame(): IntArray
     private external fun nativeSetControllerButtons(pressedMask: Int)
     private external fun nativeSetControllerAnalogAxes(x: Int, y: Int)
     private val pressedControllerButtons = mutableSetOf<String>()
     private var pendingCueText: String? = null
     private var pendingCueBinName: String? = null
+
+    private val displayRefresh = object : Runnable {
+        override fun run() {
+            if (!emulationRunning) return
+            val frame = try { nativeCopyDisplayFrame() } catch (_: Exception) { intArrayOf() }
+            if (frame.size >= 2 + 640 * 512) {
+                val width = frame[0].coerceIn(1, 640)
+                val height = frame[1].coerceIn(1, 512)
+                var bitmap = displayBitmap
+                if (bitmap == null || bitmap.width != 640 || bitmap.height != 512) {
+                    bitmap = Bitmap.createBitmap(640, 512, Bitmap.Config.ARGB_8888)
+                    displayBitmap = bitmap
+                }
+                bitmap.setPixels(frame, 2, 640, 0, 0, 640, 512)
+                displayImage.setImageBitmap(bitmap)
+                displayImage.contentDescription = "PS1 frame " + width + "x" + height
+            }
+            displayHandler.postDelayed(this, 16L)
+        }
+    }
+
+    private fun startEmulation(button: Button) {
+        if (!nativeBiosLoaded()) { status.text = "Load a valid PS1 BIOS before starting the emulator."; return }
+        if (emulationRunning) {
+            emulationRunning = false
+            emulationThread?.interrupt()
+            emulationThread = null
+            displayHandler.removeCallbacks(displayRefresh)
+            button.text = "Start emulation"
+            status.text = "Emulation paused"
+            return
+        }
+        emulationRunning = true
+        button.text = "Pause emulation"
+        status.text = "PS1 emulation running • GPU display active"
+        displayHandler.post(displayRefresh)
+        emulationThread = Thread {
+            while (emulationRunning && !Thread.currentThread().isInterrupted) {
+                try { nativeRunForCycles(564_480L); Thread.sleep(1L) }
+                catch (_: InterruptedException) { break }
+                catch (e: Exception) {
+                    emulationRunning = false
+                    runOnUiThread { status.text = "Emulation stopped: " + (e.message ?: "core error"); button.text = "Start emulation" }
+                    break
+                }
+            }
+        }.apply { name = "NEXUS-PS-Emulation"; start() }
+    }
+
+    override fun onPause() {
+        emulationRunning = false
+        emulationThread?.interrupt()
+        emulationThread = null
+        displayHandler.removeCallbacks(displayRefresh)
+        super.onPause()
+    }
 
     companion object {
         init { System.loadLibrary("nexus_ps1_android") }
@@ -54,6 +120,10 @@ class MainActivity : Activity() {
         }
         val title = TextView(this).apply { text = "NEXUS-PS"; textSize = 30f; gravity = Gravity.CENTER }
         val subtitle = TextView(this).apply { text = "PlayStation 1 • Android"; textSize = 16f; gravity = Gravity.CENTER }
+        val displayTitle = TextView(this).apply { text = "PS1 DISPLAY • GPU"; textSize = 14f; gravity = Gravity.CENTER; setPadding(0, 18, 0, 8) }
+        displayImage = ImageView(this).apply { setBackgroundColor(Color.BLACK); scaleType = ImageView.ScaleType.FIT_CENTER; adjustViewBounds = true; contentDescription = "PS1 GPU display" }
+        displayImage.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpForUi(260))
+        val emulationButton = Button(this).apply { text = "Start emulation"; setOnClickListener { startEmulation(this) } }
         status = TextView(this).apply { text = "Native core: " + nativeCoreVersion(); textSize = 14f; setPadding(0, 28, 0, 20) }
         biosInfo = TextView(this).apply { text = if (prefs.getString("bios_uri", null) != null) "BIOS: previously validated (select again to recheck)" else "BIOS: not selected" }
         discInfo = TextView(this).apply { text = "Disc: not selected" }
@@ -93,12 +163,14 @@ class MainActivity : Activity() {
             textSize = 14f
             setPadding(0, 24, 0, 20)
         }
-        listOf(title, subtitle, status, biosButton, biosInfo, runCoreButton, discButton, discInfo, folderButton, folderInfo, importButton, controllerTitle, controllerStatus, controller, notice).forEach { root.addView(it) }
+        listOf(title, subtitle, displayTitle, displayImage, emulationButton, status, biosButton, biosInfo, runCoreButton, discButton, discInfo, folderButton, folderInfo, importButton, controllerTitle, controllerStatus, controller, notice).forEach { root.addView(it) }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(root) }
         setContentView(scroll)
         refreshFolderInfo()
         restoreSavedBios()
     }
+
+    private fun dpForUi(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun createTouchController(statusLabel: TextView): View {
         fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
