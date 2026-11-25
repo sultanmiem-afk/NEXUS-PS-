@@ -19,7 +19,7 @@ constexpr std::uint8_t kIrqError = 0x05u;
 void Cdrom::reset() noexcept {
     index_ = 0; interruptEnable_ = 0; interruptFlags_ = 0; mode_ = 0;
     request_ = 0; currentLba_ = 0; cycleRemainder_ = 0;
-    reading_ = false; dataReady_ = false;
+    reading_ = false; motorOn_ = false; dataReady_ = false;
     parameters_.clear(); responses_.clear(); data_.clear();
 }
 
@@ -235,7 +235,7 @@ void Cdrom::advance(std::uint32_t cpuCycles) noexcept {
 }
 
 void Cdrom::executeCommand(std::uint8_t command) noexcept {
-    auto status = [this]() { return static_cast<std::uint8_t>(reading_ ? 0x20u : 0x00u); };
+    auto status = [this]() { return static_cast<std::uint8_t>(motorOn_ ? 0x02u : 0x00u); };
     auto findTrack = [this](std::uint32_t lba) -> const Track* {
         for (const Track& track : tracks_) {
             const std::uint32_t count = track.fileEndSector - track.fileStartSector;
@@ -266,12 +266,13 @@ void Cdrom::executeCommand(std::uint8_t command) noexcept {
     case 0x06u: // ReadN
     case 0x1Bu: // ReadS: raw-sector details remain simplified to user data
         if (!imageLoaded()) { pushResponse(0u); raiseInterrupt(kIrqError); break; }
-        reading_ = true; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
+        motorOn_ = true; reading_ = true; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
         pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     case 0x07u: // Standby
     case 0x08u: // Stop
     case 0x09u: // Pause
         reading_ = false; cycleRemainder_ = 0;
+        if (command == 0x08u || command == 0x0Au) motorOn_ = false;
         pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     case 0x0Au: // Init
         reading_ = false; mode_ = 0; filterFile_ = 0; filterChannel_ = 0;
@@ -332,7 +333,7 @@ void Cdrom::executeCommand(std::uint8_t command) noexcept {
         if (!imageLoaded() || findTrack(currentLba_) == nullptr) {
             parameters_.clear(); pushResponse(0u); raiseInterrupt(kIrqError); break;
         }
-        reading_ = false; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
+        reading_ = false; motorOn_ = true; data_.clear(); dataReady_ = false; cycleRemainder_ = 0;
         pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     case 0x19u: // Test
         if (!parameters_.empty()) {
@@ -355,7 +356,7 @@ void Cdrom::executeCommand(std::uint8_t command) noexcept {
         raiseInterrupt(2u); // final GetID response interrupt (INT2)
         break;
     case 0x03u: // Play
-        parameters_.clear(); reading_ = true; cycleRemainder_ = 0;
+        parameters_.clear(); motorOn_ = true; reading_ = true; cycleRemainder_ = 0;
         pushResponse(status()); raiseInterrupt(kIrqCommand); break;
     case 0x0Bu: // Mute
     case 0x0Cu: // Demute
