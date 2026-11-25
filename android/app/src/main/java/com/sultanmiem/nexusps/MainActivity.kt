@@ -31,6 +31,7 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("nexus_ps", MODE_PRIVATE) }
     private external fun nativeCoreVersion(): String
     private external fun nativeLoadBios(image: ByteArray): Boolean
+    private external fun nativeLoadDiscImage(image: ByteArray): Boolean
     private external fun nativeBiosLoaded(): Boolean
     private external fun nativeRunForCycles(cycleBudget: Long): Long
     private external fun nativeSetControllerButtons(pressedMask: Int)
@@ -467,7 +468,29 @@ class MainActivity : Activity() {
                     }
                 }
             }
-            pickDisc -> discInfo.text = "Disc file selected: " + name
+            pickDisc -> {
+                status.text = "Reading disc image..."
+                val image = try { readBiosBytes(uri) } catch (e: Exception) {
+                    status.text = e.message ?: "Could not read disc image"
+                    null
+                }
+                if (image == null) {
+                    discInfo.text = "Disc: could not read file"
+                    status.text = "Disc image read failed"
+                } else if (image.size < 2048 || (image.size % 2352 != 0 && image.size % 2048 != 0)) {
+                    discInfo.text = "Disc: invalid image"
+                    status.text = "Unsupported disc image size. Expected raw 2352-byte or cooked 2048-byte sectors."
+                } else if (!nativeBiosLoaded()) {
+                    discInfo.text = "Disc: selected, BIOS required"
+                    status.text = "Load a valid PS1 BIOS before loading a game."
+                } else if (nativeLoadDiscImage(image)) {
+                    discInfo.text = "Disc loaded: $name • ${image.size / 1024 / 1024} MiB"
+                    status.text = "Disc image loaded into PS1 CD-ROM core"
+                } else {
+                    discInfo.text = "Disc: core rejected image"
+                    status.text = "The CD-ROM core could not mount this image."
+                }
+            }
         }
     }
 }
