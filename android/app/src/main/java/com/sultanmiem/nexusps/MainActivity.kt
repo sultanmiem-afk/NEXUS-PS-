@@ -38,7 +38,7 @@ class MainActivity : Activity() {
         val title = TextView(this).apply { text = "NEXUS-PS"; textSize = 30f; gravity = Gravity.CENTER }
         val subtitle = TextView(this).apply { text = "PlayStation 1 • Android"; textSize = 16f; gravity = Gravity.CENTER }
         status = TextView(this).apply { text = "Native core: " + nativeCoreVersion(); textSize = 14f; setPadding(0, 28, 0, 20) }
-        biosInfo = TextView(this).apply { text = "BIOS: not selected" }
+        biosInfo = TextView(this).apply { text = if (prefs.getString("bios_uri", null) != null) "BIOS: previously validated (select again to recheck)" else "BIOS: not selected" }
         discInfo = TextView(this).apply { text = "Disc: not selected" }
         folderInfo = TextView(this).apply { text = "Games folder: not selected" }
         val biosButton = Button(this).apply { text = "Choose BIOS (any file type)"; setOnClickListener { explainFileAccess(pickBios, "*/*") } }
@@ -68,6 +68,46 @@ class MainActivity : Activity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         startActivityForResult(intent, requestCode)
+    }
+
+    private fun validateBios(uri: Uri): String? {
+        val expectedSize = 512L * 1024L
+        val descriptor = contentResolver.openAssetFileDescriptor(uri, "r")
+        descriptor?.use {
+            if (it.length >= 0L && it.length != expectedSize) {
+                return "Invalid BIOS size: ${it.length} bytes. A PS1 BIOS must be exactly 524,288 bytes (512 KiB)."
+            }
+        }
+
+        val input = contentResolver.openInputStream(uri)
+            ?: return "Android could not read this file."
+        input.use { stream ->
+            val buffer = ByteArray(8192)
+            var total = 0L
+            var allZero = true
+            var allFF = true
+            while (true) {
+                val count = stream.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                total += count
+                if (total > expectedSize) {
+                    return "This file is larger than 512 KiB, so it is not a supported PS1 BIOS image."
+                }
+                for (i in 0 until count) {
+                    val value = buffer[i].toInt() and 0xFF
+                    if (value != 0) allZero = false
+                    if (value != 0xFF) allFF = false
+                }
+            }
+            if (total != expectedSize) {
+                return "Invalid BIOS size: $total bytes. Expected exactly 524,288 bytes (512 KiB)."
+            }
+            if (allZero || allFF) {
+                return "The file contains only repeated empty data and does not look like a BIOS image."
+            }
+        }
+        return null
     }
 
     private fun chooseGamesFolder() {
@@ -171,7 +211,24 @@ class MainActivity : Activity() {
         if (granted != 0) try { contentResolver.takePersistableUriPermission(uri, granted) } catch (_: SecurityException) { }
         val name = displayName(uri)
         when (requestCode) {
-            pickBios -> biosInfo.text = "BIOS selected: " + name
+            pickBios -> {
+                status.text = "Checking BIOS file..."
+                val error = try { validateBios(uri) } catch (e: Exception) {
+                    e.message ?: "Could not inspect this file."
+                }
+                if (error != null) {
+                    prefs.edit().remove("bios_uri").apply()
+                    biosInfo.text = "BIOS: invalid file"
+                    status.text = "BIOS validation failed"
+                    AlertDialog.Builder(this).setTitle("Invalid PS1 BIOS")
+                        .setMessage(error)
+                        .setPositiveButton("OK", null).show()
+                } else {
+                    prefs.edit().putString("bios_uri", uri.toString()).apply()
+                    biosInfo.text = "BIOS validated: $name (512 KiB)"
+                    status.text = "BIOS file passed size and basic-content checks"
+                }
+            }
             pickDisc -> discInfo.text = "Disc file selected: " + name
         }
     }
