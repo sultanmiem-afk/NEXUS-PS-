@@ -20,7 +20,7 @@ void Cdrom::reset() noexcept {
     index_ = 0; interruptEnable_ = 0; interruptFlags_ = 0; mode_ = 0;
     request_ = 0; currentLba_ = 0; cycleRemainder_ = 0;
     reading_ = false; motorOn_ = false; dataReady_ = false;
-    parameters_.clear(); responses_.clear(); data_.clear();
+    parameters_.clear(); responses_.clear(); pendingInterrupts_.clear(); data_.clear();
 }
 
 bool Cdrom::loadImage(const std::vector<std::uint8_t>& image) noexcept {
@@ -353,7 +353,7 @@ void Cdrom::executeCommand(std::uint8_t command) noexcept {
         pushResponse(0x20u); // SCEA region/product family placeholder
         pushResponse('S'); pushResponse('C'); pushResponse('E'); pushResponse('A');
         raiseInterrupt(kIrqCommand);
-        raiseInterrupt(2u); // final GetID response interrupt (INT2)
+        pendingInterrupts_.push_back(2u); // final GetID response interrupt (INT2)
         break;
     case 0x03u: // Play
         parameters_.clear(); motorOn_ = true; reading_ = true; cycleRemainder_ = 0;
@@ -383,6 +383,10 @@ bool Cdrom::read8(std::uint32_t address, std::uint8_t& value) noexcept {
     if (reg == 1u) {
         value = responses_.empty() ? 0u : responses_.front();
         if (!responses_.empty()) responses_.pop_front();
+        if (responses_.empty() && !pendingInterrupts_.empty()) {
+            interruptFlags_ = pendingInterrupts_.front();
+            pendingInterrupts_.pop_front();
+        }
         return true;
     }
     if (reg == 2u) {
