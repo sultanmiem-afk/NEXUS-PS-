@@ -71,6 +71,8 @@ private:
     SystemBus bus_;
     CpuCore cpu_;
     std::uint64_t audioSamplePhase_ = 0;
+    bool cdromIrqLinePrevious_ = false;
+    bool dmaIrqLinePrevious_ = false;
 };
 
 } // namespace nexus::ps1
