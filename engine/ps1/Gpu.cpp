@@ -956,6 +956,68 @@ void Gpu::writeGp1(std::uint32_t value) noexcept {
     }
 }
 
+
+bool Gpu::copyDisplayToRgba8888(std::uint32_t* destination, std::size_t capacity,
+                               std::uint32_t& width, std::uint32_t& height) const noexcept {
+    constexpr std::uint32_t kMaxWidth = 640u;
+    constexpr std::uint32_t kMaxHeight = 512u;
+    width = 0u;
+    height = 0u;
+    if (destination == nullptr || capacity < static_cast<std::size_t>(kMaxWidth) * kMaxHeight)
+        return false;
+
+    const std::uint32_t horizontalMode = displayMode_ & 3u;
+    static constexpr std::uint32_t kWidths[4] = {256u, 320u, 512u, 640u};
+    width = (displayMode_ & (1u << 6)) ? 368u : kWidths[horizontalMode];
+    if (displayMode_ & (1u << 2)) height = 480u;
+    else height = 240u;
+    if (displayMode_ & (1u << 3)) height = std::min(height, 256u);
+    width = std::min(width, kMaxWidth);
+    height = std::min(height, kMaxHeight);
+
+    const std::uint32_t startX = displayStart_ & 0x3FFu;
+    const std::uint32_t startY = (displayStart_ >> 10) & 0x1FFu;
+    const std::size_t total = static_cast<std::size_t>(kMaxWidth) * kMaxHeight;
+    std::fill(destination, destination + total, 0xFF000000u);
+    if (displayDisabled_) return true;
+
+    if ((displayMode_ & (1u << 4)) == 0u) {
+        for (std::uint32_t y = 0; y < height; ++y) {
+            for (std::uint32_t x = 0; x < width; ++x) {
+                std::uint16_t pixel = 0;
+                (void)vram_.readPixel((startX + x) & 0x3FFu,
+                                      (startY + y) & 0x1FFu, pixel);
+                const std::uint32_t r = (pixel & 0x1Fu) * 255u / 31u;
+                const std::uint32_t g = ((pixel >> 5) & 0x1Fu) * 255u / 31u;
+                const std::uint32_t b = ((pixel >> 10) & 0x1Fu) * 255u / 31u;
+                destination[static_cast<std::size_t>(y) * kMaxWidth + x] =
+                    0xFF000000u | (r << 16) | (g << 8) | b;
+            }
+        }
+        return true;
+    }
+
+    // In 24-bit mode pixels are a byte stream packed into the 16-bit VRAM words.
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            const std::uint32_t byteOffset = (startX * 2u + x * 3u) & 2047u;
+            std::uint8_t rgb[3]{};
+            for (std::uint32_t channel = 0; channel < 3u; ++channel) {
+                const std::uint32_t offset = (byteOffset + channel) & 2047u;
+                std::uint16_t packed = 0;
+                (void)vram_.readPixel((offset / 2u) & 0x3FFu,
+                                      (startY + y) & 0x1FFu, packed);
+                rgb[channel] = static_cast<std::uint8_t>(
+                    (offset & 1u) ? (packed >> 8) : packed);
+            }
+            destination[static_cast<std::size_t>(y) * kMaxWidth + x] =
+                0xFF000000u | (static_cast<std::uint32_t>(rgb[0]) << 16) |
+                (static_cast<std::uint32_t>(rgb[1]) << 8) | rgb[2];
+        }
+    }
+    return true;
+}
+
 std::uint32_t Gpu::readStatus() const noexcept {
     std::uint32_t status = 0;
 
