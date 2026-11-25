@@ -653,5 +653,28 @@ int main() {
         assert(bus.read32(0x100u, unchanged));
         assert(unchanged == 0x11223344u);
     }
+
+    // Failed instruction fetches enter the R3000A IBE exception vector.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0x2000u);
+        const auto result = cpu.step();
+        assert(result.status == CpuStepStatus::ExceptionTaken);
+        assert(cpu.state().pc == 0xBFC00180u);
+        assert(cpu.cop0().read(Cop0::kEpc) == 0x2000u);
+        assert(((cpu.cop0().read(Cop0::kCause) >> 2) & 0x1Fu) ==
+               static_cast<std::uint32_t>(CpuException::InstructionBusError));
+    }
+    // Failed data reads and writes enter the R3000A DBE exception vector.
+    {
+        TestBus bus; CpuCore cpu(bus); cpu.reset(0);
+        cpu.state().gpr[1] = 0x2000u;
+        put(bus, 0, i_type(0x23, 1, 2, 0)); // LW from unmapped address
+        const auto result = cpu.step();
+        assert(result.status == CpuStepStatus::ExceptionTaken);
+        assert(cpu.state().pc == 0xBFC00180u);
+        assert(cpu.cop0().read(Cop0::kEpc) == 0u);
+        assert(((cpu.cop0().read(Cop0::kCause) >> 2) & 0x1Fu) ==
+               static_cast<std::uint32_t>(CpuException::DataBusError));
+    }
     return 0;
 }
