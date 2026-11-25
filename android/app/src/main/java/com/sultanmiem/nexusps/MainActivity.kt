@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private external fun nativeCoreVersion(): String
     private external fun nativeLoadBios(image: ByteArray): Boolean
     private external fun nativeBiosLoaded(): Boolean
+    private external fun nativeRunForCycles(cycleBudget: Long): Long
     private external fun nativeSetControllerButtons(pressedMask: Int)
     private external fun nativeSetControllerAnalogAxes(x: Int, y: Int)
     private val pressedControllerButtons = mutableSetOf<String>()
@@ -54,6 +55,19 @@ class MainActivity : Activity() {
         discInfo = TextView(this).apply { text = "Disc: not selected" }
         folderInfo = TextView(this).apply { text = "Games folder: not selected" }
         val biosButton = Button(this).apply { text = "Choose BIOS (any file type)"; setOnClickListener { explainFileAccess(pickBios, "*/*") } }
+        val runCoreButton = Button(this).apply {
+            text = "Run PS1 core (100,000 cycles)"
+            setOnClickListener {
+                if (!nativeBiosLoaded()) {
+                    status.text = "Select and load your PS1 BIOS first"
+                } else {
+                    isEnabled = false
+                    val executed = nativeRunForCycles(100_000L)
+                    status.text = "PS1 core executed $executed CPU cycles"
+                    isEnabled = true
+                }
+            }
+        }
         val discButton = Button(this).apply { text = "Choose game (CUE or BIN)"; setOnClickListener { explainFileAccess(pickDisc, "*/*") } }
         val folderButton = Button(this).apply { text = "Create / choose games folder"; setOnClickListener { chooseGamesFolder() } }
         val importButton = Button(this).apply { text = "Copy games into NEXUS-PS folder"; setOnClickListener { chooseGamesToImport() } }
@@ -75,7 +89,7 @@ class MainActivity : Activity() {
             textSize = 14f
             setPadding(0, 24, 0, 20)
         }
-        listOf(title, subtitle, status, biosButton, biosInfo, discButton, discInfo, folderButton, folderInfo, importButton, controllerTitle, controllerStatus, controller, notice).forEach { root.addView(it) }
+        listOf(title, subtitle, status, biosButton, biosInfo, runCoreButton, discButton, discInfo, folderButton, folderInfo, importButton, controllerTitle, controllerStatus, controller, notice).forEach { root.addView(it) }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(root) }
         setContentView(scroll)
         refreshFolderInfo()
