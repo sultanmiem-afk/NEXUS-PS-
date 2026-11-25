@@ -11,6 +11,8 @@ enum class CpuException : std::uint8_t {
     Interrupt = 0,
     AddressLoad = 4,
     AddressStore = 5,
+    InstructionBusError = 6,
+    DataBusError = 7,
     Syscall = 8,
     Breakpoint = 9,
     ReservedInstruction = 10,
