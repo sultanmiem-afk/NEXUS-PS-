@@ -219,6 +219,32 @@ int main() {
     assert(mode2Cdrom.read8(0x1F801802u, byte) && byte == 0x7Cu);
 
 
+    // MODE2 Form 2 is selected by Submode bit 5 and exposes 2324 bytes.
+    // The duplicated subheader is populated as it appears in a raw sector.
+    std::vector<std::uint8_t> mode2Form2Bin(151u * 2352u, 0u);
+    const std::size_t form2Base = 150u * 2352u;
+    mode2Form2Bin[form2Base + 18u] = 0x20u; // Form 2 bit in Submode.
+    mode2Form2Bin[form2Base + 22u] = 0x20u; // Duplicate Submode byte.
+    std::fill(mode2Form2Bin.begin() + static_cast<std::ptrdiff_t>(form2Base + 24u),
+              mode2Form2Bin.begin() + static_cast<std::ptrdiff_t>(form2Base + 24u + 2324u),
+              0x6Du);
+    Cdrom mode2Form2Cdrom;
+    assert(mode2Form2Cdrom.loadCue(mode2Cue, "mode2.bin", mode2Form2Bin));
+    mode2Form2Cdrom.write8(0x1F801802u, 0x00u);
+    mode2Form2Cdrom.write8(0x1F801802u, 0x02u);
+    mode2Form2Cdrom.write8(0x1F801802u, 0x00u);
+    mode2Form2Cdrom.write8(0x1F801801u, 0x02u); // Setloc
+    mode2Form2Cdrom.read8(0x1F801801u, byte);
+    mode2Form2Cdrom.write8(0x1F801801u, 0x06u); // ReadN
+    mode2Form2Cdrom.read8(0x1F801801u, byte);
+    mode2Form2Cdrom.advance(Cdrom::kCyclesPerSector);
+    assert(mode2Form2Cdrom.dataAvailableBytes() == 2324u);
+    for (std::size_t i = 0; i < 2324u; ++i) {
+        assert(mode2Form2Cdrom.read8(0x1F801802u, byte));
+        assert(byte == 0x6Du);
+    }
+    assert(mode2Form2Cdrom.dataAvailableBytes() == 0u);
+
     // Register map invariants: 801 always pops response; 802 at index 0 is data.
     Cdrom registerCdrom;
     assert(registerCdrom.loadImage(image));
