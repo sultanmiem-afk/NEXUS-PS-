@@ -1,6 +1,8 @@
 package com.sultanmiem.nexusps
 
 import android.app.Activity
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
@@ -76,48 +78,104 @@ class MainActivity : Activity() {
     }
 
     private fun createTouchController(statusLabel: TextView): View {
-        fun makeButton(label: String): Button = Button(this).apply {
-            text = label
-            textSize = 15f
-            isAllCaps = false
-            setOnTouchListener { view, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        view.alpha = 0.55f
-                        statusLabel.text = "Pressed: $label"
-                        true
+        fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+        fun button(label: String, accent: Int = Color.rgb(55, 65, 81), height: Int = 52): Button {
+            return Button(this).apply {
+                text = label
+                textSize = if (label.length > 2) 11f else 17f
+                isAllCaps = false
+                setTextColor(Color.WHITE)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dp(18).toFloat()
+                    setColor(accent)
+                    setStroke(dp(1), Color.argb(90, 255, 255, 255))
+                    setGradientType(GradientDrawable.LINEAR_GRADIENT)
+                }
+                elevation = dp(5).toFloat()
+                setOnTouchListener { view, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                            view.alpha = 0.58f
+                            view.scaleX = 0.94f
+                            view.scaleY = 0.94f
+                            statusLabel.text = "Pressed: $label • PSP-style layout preview"
+                            true
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                            view.alpha = 1f
+                            view.scaleX = 1f
+                            view.scaleY = 1f
+                            statusLabel.text = "Controller: ready • input bridge not connected"
+                            true
+                        }
+                        else -> true
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        view.alpha = 1f
-                        statusLabel.text = "Controller: ready • input preview only"
-                        true
-                    }
-                    else -> true
                 }
             }
         }
 
-        fun row(vararg labels: String): LinearLayout = LinearLayout(this).apply {
+        fun buttonRow(vararg items: Pair<String, Int>): LinearLayout =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                items.forEach { (label, color) ->
+                    val b = button(label, color, 54)
+                    addView(b, LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                        setMargins(dp(3), dp(3), dp(3), dp(3))
+                    })
+                }
+            }
+
+        val dark = Color.rgb(24, 29, 39)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(12), dp(10), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(24).toFloat()
+                setColor(dark)
+                setStroke(dp(1), Color.rgb(75, 85, 99))
+            }
+        }
+
+        panel.addView(buttonRow("L2" to Color.rgb(67, 76, 92), "L1" to Color.rgb(67, 76, 92),
+            "R1" to Color.rgb(67, 76, 92), "R2" to Color.rgb(67, 76, 92)))
+
+        val main = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            labels.forEach { label ->
-                val button = makeButton(label)
-                val params = LinearLayout.LayoutParams(0, 64, 1f).apply {
-                    setMargins(4, 4, 4, 4)
-                }
-                addView(button, params)
-            }
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(10), 0, dp(10))
         }
 
-        return LinearLayout(this).apply {
+        val dpad = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            addView(row("↑"))
-            addView(row("←", "↓", "→"))
-            addView(row("SELECT", "START"))
-            addView(row("△", "○", "×", "□"))
-            addView(row("L1", "L2", "R1", "R2"))
         }
+        dpad.addView(buttonRow(" " to dark, "↑" to Color.rgb(55, 65, 81), " " to dark))
+        dpad.addView(buttonRow("←" to Color.rgb(55, 65, 81), "●" to Color.rgb(39, 47, 62), "→" to Color.rgb(55, 65, 81)))
+        dpad.addView(buttonRow(" " to dark, "↓" to Color.rgb(55, 65, 81), " " to dark))
+        main.addView(dpad, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        val face = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        face.addView(buttonRow("△" to Color.rgb(48, 105, 133), "○" to Color.rgb(143, 55, 67)))
+        face.addView(buttonRow("×" to Color.rgb(48, 105, 133), "□" to Color.rgb(143, 55, 67)))
+        main.addView(face, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        panel.addView(main)
+
+        val centerControls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        centerControls.addView(button("SELECT", Color.rgb(72, 78, 91), 42),
+            LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(28), 0, dp(8), 0) })
+        centerControls.addView(button("START", Color.rgb(72, 78, 91), 42),
+            LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(8), 0, dp(28), 0) })
+        panel.addView(centerControls)
+        return panel
     }
 
     private fun loadBiosIntoCore(uri: Uri): Boolean {
