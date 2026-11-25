@@ -25,7 +25,7 @@ int main() {
 
     // CD-ROM byte registers are mapped through the CPU-visible memory bus.
     assert(bus.write8(0x1F801800u, 1u));
-    assert(bus.write8(0x1F801802u, 0x1Fu)); // enable all five CD-ROM IRQ classes
+    assert(bus.write8(0x1F801801u, 0x1Fu)); // enable all five CD-ROM IRQ classes
     assert(bus.write8(0x1F801800u, 0u));
 
     // Setloc 00:02:00 BCD maps to LBA 0 after the 150-sector lead-in.
@@ -47,9 +47,9 @@ int main() {
     cdrom.advance(Cdrom::kCyclesPerSector - 1u);
     std::uint8_t byte = 0xFFu;
     assert(bus.read8(0x1F801800u, byte));
-    assert((byte & 0x08u) == 0u);
+    assert((byte & 0x40u) == 0u);
     cdrom.advance(1u);
-    assert((cdrom.interruptFlags() & 0x02u) != 0u);
+    assert(cdrom.interruptFlags() == 2u);
     assert(cdrom.irqPending());
 
     for (std::size_t i = 0; i < 2048u; ++i) {
@@ -217,6 +217,55 @@ int main() {
     mode2Cdrom.read8(0x1F801801u, byte);
     mode2Cdrom.advance(Cdrom::kCyclesPerSector);
     assert(mode2Cdrom.read8(0x1F801802u, byte) && byte == 0x7Cu);
+
+
+    // Register map invariants: 801 always pops response; 802 at index 0 is data.
+    Cdrom registerCdrom;
+    assert(registerCdrom.loadImage(image));
+    registerCdrom.write8(0x1F801800u, 1u);
+    registerCdrom.write8(0x1F801801u, 0x1Fu); // only index 1/801 is IRQ enable
+    assert(registerCdrom.interruptEnable() == 0x1Fu);
+    registerCdrom.write8(0x1F801800u, 2u);
+    registerCdrom.write8(0x1F801801u, 0x00u); // index 2/801 must not overwrite enable
+    registerCdrom.write8(0x1F801802u, 0x77u); // index 2/802 must not overwrite mode
+    assert(registerCdrom.interruptEnable() == 0x1Fu);
+    registerCdrom.write8(0x1F801800u, 0u);
+    registerCdrom.write8(0x1F801802u, 0x00u);
+    registerCdrom.write8(0x1F801802u, 0x02u);
+    registerCdrom.write8(0x1F801802u, 0x00u);
+    registerCdrom.write8(0x1F801801u, 0x02u);
+    registerCdrom.write8(0x1F801801u, 0x06u);
+    registerCdrom.advance(Cdrom::kCyclesPerSector);
+    registerCdrom.write8(0x1F801800u, 2u);
+    registerCdrom.write8(0x1F801803u, 0xFFu); // audio-volume address must not flush data
+    assert(registerCdrom.dataAvailableBytes() == 2048u);
+    registerCdrom.write8(0x1F801800u, 0u);
+    assert(registerCdrom.read8(0x1F801800u, byte));
+    assert((byte & 0x78u) == 0x78u); // response/data and parameter status bits
+    assert(registerCdrom.read8(0x1F801802u, byte) && byte == 0u);
+
+    // GetID returns a response payload and records the final INT2 code as 2, not mask 4.
+    Cdrom idCdrom;
+    assert(idCdrom.loadImage(image));
+    idCdrom.write8(0x1F801800u, 1u);
+    idCdrom.write8(0x1F801801u, 0x1Fu);
+    idCdrom.write8(0x1F801800u, 0u);
+    idCdrom.write8(0x1F801801u, 0x1Au);
+    assert(idCdrom.interruptFlags() == 2u);
+    assert(idCdrom.irqPending());
+    std::uint8_t idByte = 0;
+    for (unsigned i = 0; i < 6u; ++i) assert(idCdrom.read8(0x1F801801u, idByte));
+
+    // Unsupported command discards all stale parameters before a later Setloc.
+    Cdrom badCommandCdrom;
+    assert(badCommandCdrom.loadImage(image));
+    badCommandCdrom.write8(0x1F801802u, 0x11u);
+    badCommandCdrom.write8(0x1F801801u, 0xFEu);
+    badCommandCdrom.write8(0x1F801802u, 0x00u);
+    badCommandCdrom.write8(0x1F801802u, 0x02u);
+    badCommandCdrom.write8(0x1F801802u, 0x00u);
+    badCommandCdrom.write8(0x1F801801u, 0x02u);
+    assert(badCommandCdrom.currentLba() == 0u);
 
     return 0;
 }
