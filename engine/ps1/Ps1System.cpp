@@ -38,6 +38,19 @@ bool Ps1System::loadDiscCue(const std::string& cueText, const std::string& binFi
     return memory_.cdrom().loadCue(cueText, binFilename, binImage);
 }
 
+SystemRunResult Ps1System::runForCycles(std::uint64_t cycleBudget) {
+    SystemRunResult result{};
+    while (result.cyclesExecuted < cycleBudget) {
+        result.lastStep = step();
+        ++result.instructionsExecuted;
+        const std::uint32_t instructionCycles = result.lastStep.cpu.cycles;
+        // A zero-cycle result must never trap the frontend in an unbounded loop.
+        if (instructionCycles == 0u) break;
+        result.cyclesExecuted += instructionCycles;
+    }
+    return result;
+}
+
 SystemStepResult Ps1System::step() {
     SystemStepResult result{};
     cpu_.cop0().setHardwareInterruptPending(memory_.interrupts().active());
