@@ -57,7 +57,7 @@ int main() {
         assert(byte == static_cast<std::uint8_t>(i & 0xFFu));
     }
     assert(bus.read8(0x1F801800u, byte));
-    assert((byte & 0x08u) == 0u);
+    assert((byte & 0x40u) == 0u);
 
     // The next sector is delivered only after another sector interval.
     cdrom.advance(Cdrom::kCyclesPerSector);
