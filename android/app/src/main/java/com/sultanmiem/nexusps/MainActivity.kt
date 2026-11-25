@@ -209,8 +209,12 @@ class MainActivity : Activity() {
         fun update(x: Float, y: Float) {
             val cx=view.width/2f; val cy=view.height/2f; val r=(minOf(view.width,view.height)*0.43f).coerceAtLeast(1f)
             var dx=(x-cx)/r; var dy=(y-cy)/r; val length=kotlin.math.sqrt(dx*dx+dy*dy)
-            if (length>1f) { dx/=length; dy/=length }; axisX=dx; axisY=dy
-                val analogX = (128f + dx * 127f).toInt().coerceIn(0, 255)
+            if (length > 1f) { dx/=length; dy/=length }
+            val normalizedLength = kotlin.math.sqrt(dx*dx+dy*dy)
+            if (normalizedLength <= 0.12f) { dx=0f; dy=0f }
+            else { val scale = (normalizedLength-0.12f)/0.88f/normalizedLength; dx*=scale; dy*=scale }
+            axisX=dx; axisY=dy
+            val analogX = (128f + dx * 127f).toInt().coerceIn(0, 255)
             val analogY = (128f + dy * 127f).toInt().coerceIn(0, 255)
             nativeSetControllerAnalogAxes(analogX, analogY)
             statusLabel.text = "Analog X: $analogX • Y: $analogY"
