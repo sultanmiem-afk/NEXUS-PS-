@@ -30,6 +30,8 @@ class MainActivity : Activity() {
     private external fun nativeCoreVersion(): String
     private external fun nativeLoadBios(image: ByteArray): Boolean
     private external fun nativeBiosLoaded(): Boolean
+    private external fun nativeSetControllerButtons(pressedMask: Int)
+    private val pressedControllerButtons = mutableSetOf<String>()
 
     companion object {
         init { System.loadLibrary("nexus_ps1_android") }
@@ -59,14 +61,14 @@ class MainActivity : Activity() {
             setPadding(0, 28, 0, 12)
         }
         val controllerStatus = TextView(this).apply {
-            text = "Controller: ready • input preview only"
+            text = "Controller: connected to PS1 digital pad"
             textSize = 13f
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 12)
         }
         val controller = createTouchController(controllerStatus)
         val notice = TextView(this).apply {
-            text = "Development build. Touch buttons currently show press/release feedback; PS1 controller protocol, game loading, GPU display and audio are not connected yet. Import copies files; originals are kept."
+            text = "Touch controls now update the native PS1 digital controller through SIO0. Game execution, GPU display and audio output are still separate development tasks. Import copies files; originals are kept."
             textSize = 14f
             setPadding(0, 24, 0, 20)
         }
@@ -81,6 +83,7 @@ class MainActivity : Activity() {
         fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
         fun button(label: String, accent: Int = Color.rgb(55, 65, 81), height: Int = 52): Button {
+            val inputMask = controllerButtonMask(label)
             return Button(this).apply {
                 text = label
                 textSize = if (label.length > 2) 11f else 17f
@@ -100,14 +103,16 @@ class MainActivity : Activity() {
                             view.alpha = 0.58f
                             view.scaleX = 0.94f
                             view.scaleY = 0.94f
-                            statusLabel.text = "Pressed: $label • PSP-style layout preview"
+                            if (inputMask != 0) updateControllerButton(label, true, statusLabel)
+                            else statusLabel.text = "PSP-style controller"
                             true
                         }
                         MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
                             view.alpha = 1f
                             view.scaleX = 1f
                             view.scaleY = 1f
-                            statusLabel.text = "Controller: ready • input bridge not connected"
+                            if (inputMask != 0) updateControllerButton(label, false, statusLabel)
+                            else statusLabel.text = "Controller: connected to PS1 digital pad"
                             true
                         }
                         else -> true
@@ -176,6 +181,35 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(8), 0, dp(28), 0) })
         panel.addView(centerControls)
         return panel
+    }
+
+    private fun controllerButtonMask(label: String): Int = when (label) {
+        "SELECT" -> 1 shl 0
+        "START" -> 1 shl 3
+        "↑" -> 1 shl 4
+        "→" -> 1 shl 5
+        "↓" -> 1 shl 6
+        "←" -> 1 shl 7
+        "L2" -> 1 shl 8
+        "R2" -> 1 shl 9
+        "L1" -> 1 shl 10
+        "R1" -> 1 shl 11
+        "△" -> 1 shl 12
+        "○" -> 1 shl 13
+        "×" -> 1 shl 14
+        "□" -> 1 shl 15
+        else -> 0
+    }
+
+    private fun updateControllerButton(label: String, pressed: Boolean, statusLabel: TextView) {
+        if (pressed) pressedControllerButtons.add(label) else pressedControllerButtons.remove(label)
+        val mask = pressedControllerButtons.fold(0) { acc, name -> acc or controllerButtonMask(name) }
+        nativeSetControllerButtons(mask)
+        statusLabel.text = if (pressedControllerButtons.isEmpty()) {
+            "Controller: connected to PS1 digital pad"
+        } else {
+            "Pressed: " + pressedControllerButtons.joinToString(" + ")
+        }
     }
 
     private fun loadBiosIntoCore(uri: Uri): Boolean {
