@@ -55,15 +55,15 @@ class MainActivity : Activity() {
         override fun run() {
             if (!emulationRunning) return
             val frame = try { nativeCopyDisplayFrame() } catch (_: Exception) { intArrayOf() }
-            if (frame.size >= 2 + 640 * 512) {
+            if (frame.size >= 3) {
                 val width = frame[0].coerceIn(1, 640)
                 val height = frame[1].coerceIn(1, 512)
                 var bitmap = displayBitmap
-                if (bitmap == null || bitmap.width != 640 || bitmap.height != 512) {
-                    bitmap = Bitmap.createBitmap(640, 512, Bitmap.Config.ARGB_8888)
+                if (bitmap == null || bitmap.width != width || bitmap.height != height) {
+                    bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                     displayBitmap = bitmap
                 }
-                bitmap.setPixels(frame, 2, 640, 0, 0, 640, 512)
+                bitmap.setPixels(frame, 2, width, 0, 0, width, height)
                 displayImage.setImageBitmap(bitmap)
                 displayImage.contentDescription = "PS1 frame " + width + "x" + height
             }
