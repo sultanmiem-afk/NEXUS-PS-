@@ -1,6 +1,7 @@
 package com.sultanmiem.nexusps
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -54,15 +55,19 @@ class MainActivity : Activity() {
 
         val biosButton = Button(this).apply {
             text = "Choose BIOS"
-            setOnClickListener { openPicker(pickBios, "application/octet-stream") }
+            setOnClickListener {
+                explainFileAccess(pickBios, "application/octet-stream")
+            }
         }
         val discButton = Button(this).apply {
             text = "Choose game (CUE or BIN)"
-            setOnClickListener { openPicker(pickDisc, "*/*") }
+            setOnClickListener {
+                explainFileAccess(pickDisc, "*/*")
+            }
         }
 
         val notice = TextView(this).apply {
-            text = "Development build. File selection is ready, but game loading, GPU display, audio and touch controls are not connected yet."
+            text = "Development build. Android grants access only to the file you choose. Game loading, GPU display, audio and touch controls are not connected yet."
             textSize = 14f
             setPadding(0, 28, 0, 0)
         }
@@ -71,6 +76,17 @@ class MainActivity : Activity() {
             .forEach { root.addView(it) }
 
         setContentView(root)
+    }
+
+    private fun explainFileAccess(requestCode: Int, mime: String) {
+        AlertDialog.Builder(this)
+            .setTitle("File access")
+            .setMessage("NEXUS-PS needs permission to read the file you select. Android will open its system file picker and grant access only to that file. No access to all device files is requested.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue") { _, _ ->
+                openPicker(requestCode, mime)
+            }
+            .show()
     }
 
     private fun openPicker(requestCode: Int, mime: String) {
@@ -87,7 +103,10 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK) return
         val uri: Uri = data?.data ?: return
-        contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val grantedFlags = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
+        if (grantedFlags != 0) {
+            contentResolver.takePersistableUriPermission(uri, grantedFlags)
+        }
         val name = uri.lastPathSegment ?: uri.toString()
         when (requestCode) {
             pickBios -> biosInfo.text = "BIOS selected: $name"
