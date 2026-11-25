@@ -139,6 +139,29 @@ int main() {
     assert(bus.write8(0x1F801040u, 0x00u));
     assert(bus.read8(0x1F801040u, byte) && byte == 0x7Fu);
     assert(bus.read32(0x1F801044u, word) && (word & 0x02u) == 0u);
+
+    // DualShock analog poll reports ID 0x73 and six payload bytes.
+    bus.controller().setAnalogMode(true);
+    bus.controller().setAnalogAxes(200u, 64u);
+    assert(bus.write8(0x1F801040u, 0x01u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 0xFFu);
+    assert(bus.write8(0x1F801040u, 0x42u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 0x73u);
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 0x5Au);
+    for (int i = 0; i < 2; ++i) {
+        assert(bus.write8(0x1F801040u, 0x00u));
+        assert(bus.read8(0x1F801040u, byte));
+    }
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 128u); // Right X
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 128u); // Right Y
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 200u); // Left X
+    assert(bus.write8(0x1F801040u, 0x00u));
+    assert(bus.read8(0x1F801040u, byte) && byte == 64u); // Left Y
+    assert(bus.read32(0x1F801044u, word) && (word & 0x02u) == 0u);
     assert(bus.write16(0x1F80104Au, 0x0000u));
 
     // Alignment rules apply to halfword and word accesses.
