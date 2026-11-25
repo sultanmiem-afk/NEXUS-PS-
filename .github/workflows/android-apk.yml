@@ -1,12 +1,6 @@
 name: NEXUS-PS Android APK
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - "android/**"
-      - "engine/ps1/**"
-      - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
 permissions:
