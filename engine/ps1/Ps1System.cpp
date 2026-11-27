@@ -23,6 +23,7 @@ void Ps1System::reset(std::uint32_t resetVector) noexcept {
     audioSamplePhase_ = 0;
     cdromIrqLinePrevious_ = false;
     dmaIrqLinePrevious_ = false;
+    gpuIrqLinePrevious_ = false;
 }
 
 bool Ps1System::loadBios(const std::vector<std::uint8_t>& image) noexcept {
@@ -96,6 +97,12 @@ SystemStepResult Ps1System::step() {
     if (dmaIrqLine && !dmaIrqLinePrevious_)
         memory_.interrupts().request(1u << 3); // DMA IRQ rising edge
     dmaIrqLinePrevious_ = dmaIrqLine;
+
+    // GPU IRQ is I_STAT source bit 1 and is latched on the output rising edge.
+    const bool gpuIrqLine = gpu_.irqPending();
+    if (gpuIrqLine && !gpuIrqLinePrevious_)
+        memory_.interrupts().request(1u << 1);
+    gpuIrqLinePrevious_ = gpuIrqLine;
 
     // 44.1 kHz sample clock derived from the modeled 33.8688 MHz PS1 CPU clock.
     // The fractional phase is retained so samples are emitted at a stable average rate.
