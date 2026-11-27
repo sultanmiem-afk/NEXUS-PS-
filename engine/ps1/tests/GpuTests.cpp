@@ -891,6 +891,36 @@ int main() {
     gpu.writeGp0(1u | (1u << 16u));
     assert(vram.readPixel(62u, 60u, pixel) && pixel == 0x9234u);
 
+    // Adjacent triangles in a quad must own a shared edge exactly once.
+    // Semi-transparency makes a double-covered diagonal immediately visible.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    vram.writePixel(110u, 110u, 10u);
+    gpu.writeGp0(0x2A000018u); // Semi-transparent flat quad, red=3.
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(120u | (100u << 16u));
+    gpu.writeGp0(100u | (120u << 16u));
+    gpu.writeGp0(120u | (120u << 16u));
+    assert(vram.readPixel(110u, 110u, pixel) && pixel == 6u);
+
+    // Gouraud quads use the same top-left coverage rule.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    vram.writePixel(110u, 110u, 10u);
+    gpu.writeGp0(0x3A000018u);
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(120u | (100u << 16u));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(100u | (120u << 16u));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(120u | (120u << 16u));
+    assert(vram.readPixel(110u, 110u, pixel) && pixel == 6u);
+
     // PAL high-vertical-resolution display mode exposes all 512 scanlines.
     gpu.reset();
     gpu.writeGp1(0x03000000u);
