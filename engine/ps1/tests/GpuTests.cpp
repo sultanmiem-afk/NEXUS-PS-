@@ -760,6 +760,7 @@ int main() {
     assert(((st>>16)&1u)==1u && ((st>>17)&3u)==1u);
     gpu.writeGp1(0x10000007u);
     assert(gpu.readGp0()==2u);
+    assert(gpu.readGp0()==2u); // Internal-register read remains latched.
     gpu.writeGp0(0xE2001234u);
     gpu.writeGp1(0x10000002u);
     assert(gpu.readGp0()==0x1234u);
