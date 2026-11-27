@@ -160,7 +160,9 @@ void Gpu::processGp0Word(std::uint32_t value) {
 }
 
 std::uint32_t Gpu::readGp0() {
-    if (gpuInfoPending_) { gpuInfoPending_ = false; return gpuInfoLatch_; }
+    // GP1 internal-register reads leave the GP0 read latch stable until another
+    // read source (such as a VRAM-to-CPU transfer) replaces it.
+    if (gpuInfoPending_) return gpuInfoLatch_;
     if (transferMode_ == TransferMode::VramToCpu) {
         if (!readLatchValid_) {
             std::uint16_t first = 0;
@@ -880,6 +882,7 @@ void Gpu::executeGouraudLine() noexcept {
 }
 
 void Gpu::beginImageTransfer(TransferMode mode) {
+    gpuInfoPending_ = false;
     transferX_ = packet_[1] & 0x3FFu;
     transferY_ = (packet_[1] >> 16) & 0x1FFu;
     transferWidth_ = decodeTransferDimension(
