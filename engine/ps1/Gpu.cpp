@@ -161,7 +161,6 @@ void Gpu::processGp0Word(std::uint32_t value) {
 
 std::uint32_t Gpu::readGp0() {
     if (gpuInfoPending_) { gpuInfoPending_ = false; return gpuInfoLatch_; }
-    if (gpuInfoPending_) { gpuInfoPending_ = false; return gpuInfoLatch_; }
     if (transferMode_ == TransferMode::VramToCpu) {
         if (!readLatchValid_) {
             std::uint16_t first = 0;
@@ -186,7 +185,9 @@ void Gpu::acceptPacketWord(std::uint32_t value) {
     if (packet_.empty()) {
         const std::uint8_t opcode = static_cast<std::uint8_t>(value >> 24);
         variablePolyline_ = false;
-        if (opcode == 0x00 || opcode == 0x01) return;
+        if (opcode == 0x1Fu) { irqPending_ = true; return; }
+        if (opcode == 0x00u || opcode == 0x01u ||
+            (opcode >= 0x03u && opcode <= 0x1Eu)) return;
         if (opcode >= 0xE1 && opcode <= 0xE6) {
             executeEnvironmentCommand(value);
             return;
@@ -350,19 +351,40 @@ void Gpu::executeFillRectangle() noexcept {
 }
 
 void Gpu::executeVramCopy() noexcept {
-    const std::uint32_t sx=packet_[1]&0x3FFu, sy=(packet_[1]>>16)&0x1FFu;
-    const std::uint32_t dx=packet_[2]&0x3FFu, dy=(packet_[2]>>16)&0x1FFu;
-    const std::uint32_t ew=packet_[3]&0x3FFu, eh=(packet_[3]>>16)&0x1FFu;
-    const std::uint32_t width=ew==0u?1024u:ew, height=eh==0u?512u:eh;
-    std::vector<std::uint16_t> copy(static_cast<std::size_t>(width)*height);
-    for(std::uint32_t y=0;y<height;++y) for(std::uint32_t x=0;x<width;++x) {
-        std::uint16_t p=0; vram_.readPixel((sx+x)&0x3FFu,(sy+y)&0x1FFu,p);
-        copy[static_cast<std::size_t>(y)*width+x]=p;
-    }
-    for(std::uint32_t y=0;y<height;++y) for(std::uint32_t x=0;x<width;++x)
-        vram_.writePixel((dx+x)&0x3FFu,(dy+y)&0x1FFu,copy[static_cast<std::size_t>(y)*width+x]);
-}
+    const std::uint32_t sx = packet_[1] & 0x3FFu;
+    const std::uint32_t sy = (packet_[1] >> 16) & 0x1FFu;
+    const std::uint32_t dx = packet_[2] & 0x3FFu;
+    const std::uint32_t dy = (packet_[2] >> 16) & 0x1FFu;
+    const std::uint32_t encodedWidth = packet_[3] & 0x3FFu;
+    const std::uint32_t encodedHeight = (packet_[3] >> 16) & 0x1FFu;
+    const std::uint32_t width = encodedWidth == 0u ? Vram::kWidth : encodedWidth;
+    const std::uint32_t height = encodedHeight == 0u ? Vram::kHeight : encodedHeight;
 
+    // Snapshot the source first: overlapping VRAM copies must not smear pixels.
+    std::vector<std::uint16_t> source(static_cast<std::size_t>(width) * height);
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            std::uint16_t pixel = 0;
+            (void)vram_.readPixel((sx + x) & 0x3FFu, (sy + y) & 0x1FFu, pixel);
+            source[static_cast<std::size_t>(y) * width + x] = pixel;
+        }
+    }
+
+    for (std::uint32_t y = 0; y < height; ++y) {
+        for (std::uint32_t x = 0; x < width; ++x) {
+            const std::uint32_t targetX = (dx + x) & 0x3FFu;
+            const std::uint32_t targetY = (dy + y) & 0x1FFu;
+            std::uint16_t destination = 0;
+            (void)vram_.readPixel(targetX, targetY, destination);
+            if ((maskSetting_ & 0x02u) != 0u && (destination & 0x8000u) != 0u)
+                continue;
+
+            std::uint16_t pixel = source[static_cast<std::size_t>(y) * width + x];
+            if ((maskSetting_ & 0x01u) != 0u) pixel |= 0x8000u;
+            (void)vram_.writePixel(targetX, targetY, pixel);
+        }
+    }
+}
 
 
 namespace {
@@ -879,7 +901,14 @@ void Gpu::writeTransferPixel(std::uint16_t pixel) noexcept {
     }
     const std::uint32_t x = (transferX_ + static_cast<std::uint32_t>(transferIndex_ % transferWidth_)) % Vram::kWidth;
     const std::uint32_t y = (transferY_ + static_cast<std::uint32_t>(transferIndex_ / transferWidth_)) % Vram::kHeight;
-    vram_.writePixel(x, y, pixel);
+    std::uint16_t destination = 0;
+    (void)vram_.readPixel(x, y, destination);
+    const bool maskedOut = (maskSetting_ & 0x02u) != 0u &&
+                           (destination & 0x8000u) != 0u;
+    if (!maskedOut) {
+        if ((maskSetting_ & 0x01u) != 0u) pixel |= 0x8000u;
+        (void)vram_.writePixel(x, y, pixel);
+    }
     ++transferIndex_;
     if (transferIndex_ >= count) finishTransfer();
 }
@@ -918,8 +947,25 @@ void Gpu::executeEnvironmentCommand(std::uint32_t command) noexcept {
 }
 
 void Gpu::writeGp1(std::uint32_t value) noexcept {
-    const std::uint8_t command = static_cast<std::uint8_t>(value >> 24);
+    const std::uint8_t rawCommand = static_cast<std::uint8_t>(value >> 24);
+    // GP1 commands 40h-FFh mirror 00h-3Fh on retail PS1 GPUs.
+    const std::uint8_t command = rawCommand >= 0x40u
+        ? static_cast<std::uint8_t>(rawCommand & 0x3Fu) : rawCommand;
     const std::uint32_t data = value & 0x00FFFFFFu;
+    // GP1(11h-1Fh) are aliases of the internal-register read command.
+    if (command >= 0x10u && command <= 0x1Fu) {
+        const std::uint32_t selector = data & 0x0Fu;
+        switch (selector) {
+            case 0x02: gpuInfoLatch_ = textureWindow_; break;
+            case 0x03: gpuInfoLatch_ = drawAreaTopLeft_; break;
+            case 0x04: gpuInfoLatch_ = drawAreaBottomRight_; break;
+            case 0x05: gpuInfoLatch_ = drawOffset_; break;
+            case 0x07: gpuInfoLatch_ = 0x00000002u; break;
+            default: gpuInfoLatch_ = 0u; break;
+        }
+        gpuInfoPending_ = true;
+        return;
+    }
     switch (command) {
         case 0x00: reset(); break;
         case 0x01:
@@ -939,19 +985,6 @@ void Gpu::writeGp1(std::uint32_t value) noexcept {
         case 0x06: horizontalRange_ = data; break;
         case 0x07: verticalRange_ = data; break;
         case 0x08: displayMode_ = data & 0xFFu; break;
-        case 0x10: {
-            const std::uint32_t selector = data & 0x0Fu;
-            switch (selector) {
-                case 0x02: gpuInfoLatch_ = textureWindow_; break;
-                case 0x03: gpuInfoLatch_ = drawAreaTopLeft_; break;
-                case 0x04: gpuInfoLatch_ = drawAreaBottomRight_; break;
-                case 0x05: gpuInfoLatch_ = drawOffset_; break;
-                case 0x07: gpuInfoLatch_ = 0x00000002u; break; // PS1 GPU type.
-                default: gpuInfoLatch_ = 0u; break;
-            }
-            gpuInfoPending_ = true;
-            break;
-        }
         default: break;
     }
 }
@@ -969,8 +1002,10 @@ bool Gpu::copyDisplayToRgba8888(std::uint32_t* destination, std::size_t capacity
     const std::uint32_t horizontalMode = displayMode_ & 3u;
     static constexpr std::uint32_t kWidths[4] = {256u, 320u, 512u, 640u};
     width = (displayMode_ & (1u << 6)) ? 368u : kWidths[horizontalMode];
-    if (displayMode_ & (1u << 2)) height = 480u;
-    else height = (displayMode_ & (1u << 3)) ? 256u : 240u;
+    const bool palMode = (displayMode_ & (1u << 3)) != 0u;
+    const bool highVerticalResolution = (displayMode_ & (1u << 2)) != 0u;
+    height = highVerticalResolution ? (palMode ? 512u : 480u)
+                                    : (palMode ? 256u : 240u);
     width = std::min(width, kMaxWidth);
     height = std::min(height, kMaxHeight);
 
