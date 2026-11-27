@@ -841,5 +841,61 @@ int main() {
     assert(frame[1] == 0xFF000000u);
     assert(!gpu.copyDisplayToRgba8888(frame.data(), 10u, frameWidth, frameHeight));
 
+    // GP0(1F) raises the GPU IRQ line; GP1(02) acknowledges the device latch.
+    gpu.reset();
+    gpu.writeGp0(0x1F000000u);
+    assert((gpu.readStatus() & (1u << 24)) != 0u);
+    gpu.writeGp1(0x02000000u);
+    assert((gpu.readStatus() & (1u << 24)) == 0u);
+
+    // GP1 command mirrors and internal-register read aliases behave identically.
+    gpu.writeGp1(0x43000001u); // GP1(43) mirrors GP1(03): display off.
+    assert((gpu.readStatus() & (1u << 23)) != 0u);
+    gpu.writeGp1(0x43000000u);
+    assert((gpu.readStatus() & (1u << 23)) == 0u);
+    gpu.writeGp0(0xE3001234u);
+    gpu.writeGp1(0x17000003u); // GP1(17) mirrors GP1(10), selector 3.
+    assert(gpu.readGp0() == 0x00001234u);
+
+    // Mask-bit check and force settings apply to CPU-to-VRAM image transfers.
+    gpu.reset();
+    vram.clear(0u);
+    vram.writePixel(50u, 50u, 0x8001u);
+    gpu.writeGp0(0xE6000002u); // Do not overwrite destination pixels with mask bit set.
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(50u | (50u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    gpu.writeGp0(0x00001234u);
+    assert(vram.readPixel(50u, 50u, pixel) && pixel == 0x8001u);
+    gpu.writeGp0(0xE6000001u); // Force mask bit 15 on newly written pixels.
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(51u | (50u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    gpu.writeGp0(0x00001234u);
+    assert(vram.readPixel(51u, 50u, pixel) && pixel == 0x9234u);
+
+    // The same mask semantics apply to VRAM-to-VRAM copies.
+    vram.writePixel(60u, 60u, 0x1234u);
+    vram.writePixel(61u, 60u, 0x8000u);
+    gpu.writeGp0(0xE6000002u);
+    gpu.writeGp0(0x80000000u);
+    gpu.writeGp0(60u | (60u << 16u));
+    gpu.writeGp0(61u | (60u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(61u, 60u, pixel) && pixel == 0x8000u);
+    gpu.writeGp0(0xE6000001u);
+    gpu.writeGp0(0x80000000u);
+    gpu.writeGp0(60u | (60u << 16u));
+    gpu.writeGp0(62u | (60u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(62u, 60u, pixel) && pixel == 0x9234u);
+
+    // PAL high-vertical-resolution display mode exposes all 512 scanlines.
+    gpu.reset();
+    gpu.writeGp1(0x03000000u);
+    gpu.writeGp1(0x0800000Cu); // PAL + 480-line interlaced mode.
+    assert(gpu.copyDisplayToRgba8888(frame.data(), frame.size(), frameWidth, frameHeight));
+    assert(frameWidth == 256u && frameHeight == 512u);
+
     return 0;
 }
