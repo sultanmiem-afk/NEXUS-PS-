@@ -148,7 +148,7 @@ private:
     void executeGouraudLine(bool includeEnd = true) noexcept;
     void executePolyline() noexcept;
     void writeDrawPixel(int x, int y, std::uint16_t source, bool semiTransparent) noexcept;
-    void drawLine(int x0, int y0, int x1, int y1, std::uint16_t color,
+    void drawLine(int x0, int y0, int x1, int y1, std::uint32_t rgb,
                   bool semiTransparent, bool includeEnd = true) noexcept;
     void drawTriangle(int x0, int y0, int x1, int y1, int x2, int y2,
                       std::uint32_t rgb, bool semiTransparent = false) noexcept;
