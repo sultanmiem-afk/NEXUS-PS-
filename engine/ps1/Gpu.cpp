@@ -791,9 +791,12 @@ void Gpu::executeFlatLine() noexcept {
 
 void Gpu::writeDrawPixel(int x, int y, std::uint16_t source,
                          bool semiTransparent) noexcept {
-    std::uint16_t destination = 0;
-    if (!vram_.readPixel(static_cast<std::uint32_t>(x),
-                         static_cast<std::uint32_t>(y), destination)) return;
+    if (x < 0 || x >= static_cast<int>(Vram::kWidth) ||
+        y < 0 || y >= static_cast<int>(Vram::kHeight)) return;
+    std::uint16_t* const pixels = vram_.data();
+    const std::size_t index = static_cast<std::size_t>(y) * Vram::kWidth +
+                              static_cast<std::size_t>(x);
+    const std::uint16_t destination = pixels[index];
     if ((maskSetting_ & 0x02u) != 0u && (destination & 0x8000u) != 0u) return;
     std::uint16_t output = source;
     if (semiTransparent) {
@@ -811,7 +814,7 @@ void Gpu::writeDrawPixel(int x, int y, std::uint16_t source,
         output = static_cast<std::uint16_t>(blend(sr, dr) | (blend(sg, dg) << 5) | (blend(sb, db) << 10));
     }
     if ((maskSetting_ & 1u) != 0u) output |= 0x8000u;
-    vram_.writePixel(static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y), output);
+    pixels[index] = output;
 }
 
 void Gpu::drawLine(int x0, int y0, int x1, int y1,
@@ -1014,6 +1017,7 @@ bool Gpu::copyDisplayToRgba8888(std::uint32_t* destination, std::size_t capacity
 
     const std::uint32_t startX = displayStart_ & 0x3FFu;
     const std::uint32_t startY = (displayStart_ >> 10) & 0x1FFu;
+    const std::uint16_t* const vramPixels = vram_.data();
     const std::size_t total = static_cast<std::size_t>(kMaxWidth) * kMaxHeight;
     std::fill(destination, destination + total, 0xFF000000u);
     if (displayDisabled_) return true;
@@ -1021,9 +1025,9 @@ bool Gpu::copyDisplayToRgba8888(std::uint32_t* destination, std::size_t capacity
     if ((displayMode_ & (1u << 4)) == 0u) {
         for (std::uint32_t y = 0; y < height; ++y) {
             for (std::uint32_t x = 0; x < width; ++x) {
-                std::uint16_t pixel = 0;
-                (void)vram_.readPixel((startX + x) & 0x3FFu,
-                                      (startY + y) & 0x1FFu, pixel);
+                const std::uint16_t pixel = vramPixels[
+                    static_cast<std::size_t>((startY + y) & 0x1FFu) * Vram::kWidth +
+                    ((startX + x) & 0x3FFu)];
                 const std::uint32_t r = (pixel & 0x1Fu) * 255u / 31u;
                 const std::uint32_t g = ((pixel >> 5) & 0x1Fu) * 255u / 31u;
                 const std::uint32_t b = ((pixel >> 10) & 0x1Fu) * 255u / 31u;
@@ -1041,9 +1045,9 @@ bool Gpu::copyDisplayToRgba8888(std::uint32_t* destination, std::size_t capacity
             std::uint8_t rgb[3]{};
             for (std::uint32_t channel = 0; channel < 3u; ++channel) {
                 const std::uint32_t offset = (byteOffset + channel) & 2047u;
-                std::uint16_t packed = 0;
-                (void)vram_.readPixel((offset / 2u) & 0x3FFu,
-                                      (startY + y) & 0x1FFu, packed);
+                const std::uint16_t packed = vramPixels[
+                    static_cast<std::size_t>((startY + y) & 0x1FFu) * Vram::kWidth +
+                    ((offset / 2u) & 0x3FFu)];
                 rgb[channel] = static_cast<std::uint8_t>(
                     (offset & 1u) ? (packed >> 8) : packed);
             }
