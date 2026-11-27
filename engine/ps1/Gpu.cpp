@@ -273,8 +273,7 @@ void Gpu::executePolyline() noexcept {
 
     if (!gouraud) {
         if (packet_.size() < 3u) return;
-        const std::uint16_t color =
-            static_cast<std::uint16_t>(color24To15(packet_[0]));
+        const std::uint32_t color = packet_[0] & 0x00FFFFFFu;
         int previousX = decodeCoordinate(packet_[1]) + ox;
         int previousY = decodeCoordinate(packet_[1] >> 16) + oy;
         for (std::size_t i = 2u; i < packet_.size(); ++i) {
@@ -854,7 +853,7 @@ void Gpu::executeTexturedRectangle() noexcept {
 
 void Gpu::executeFlatLine() noexcept {
     const std::uint8_t opcode = static_cast<std::uint8_t>(packet_[0] >> 24);
-    const std::uint16_t color = static_cast<std::uint16_t>(color24To15(packet_[0]));
+    const std::uint32_t color = packet_[0] & 0x00FFFFFFu;
     const int offsetX = signExtend11(drawOffset_ & 0x7FFu);
     const int offsetY = signExtend11((drawOffset_ >> 11) & 0x7FFu);
     drawLine(signExtend11(packet_[1]) + offsetX,
@@ -893,7 +892,7 @@ void Gpu::writeDrawPixel(int x, int y, std::uint16_t source,
 }
 
 void Gpu::drawLine(int x0, int y0, int x1, int y1,
-                   std::uint16_t color, bool semiTransparent,
+                   std::uint32_t rgb, bool semiTransparent,
                    bool includeEnd) noexcept {
     const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
     const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
@@ -910,6 +909,9 @@ void Gpu::drawLine(int x0, int y0, int x1, int y1,
             x0 >= left && x0 <= right && y0 >= top && y0 <= bottom &&
             x0 >= 0 && x0 < static_cast<int>(Vram::kWidth) &&
             y0 >= 0 && y0 < static_cast<int>(Vram::kHeight)) {
+            const std::uint16_t color = (drawMode_ & (1u << 9)) != 0u
+                ? ditheredColor24To15(rgb, x0, y0)
+                : static_cast<std::uint16_t>(color24To15(rgb));
             writeDrawPixel(x0, y0, color, semiTransparent);
         }
         if (atEnd) break;
