@@ -905,6 +905,19 @@ int main() {
     gpu.writeGp0(120u | (120u << 16u));
     assert(vram.readPixel(110u, 110u, pixel) && pixel == 6u);
 
+    // Semi-transparent flat polylines must not blend a shared vertex twice.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    vram.writePixel(110u, 200u, 10u);
+    gpu.writeGp0(0x4A000018u);
+    gpu.writeGp0(100u | (200u << 16u));
+    gpu.writeGp0(110u | (200u << 16u));
+    gpu.writeGp0(120u | (200u << 16u));
+    gpu.writeGp0(0x55555555u);
+    assert(vram.readPixel(110u, 200u, pixel) && pixel == 6u);
+
     // Gouraud quads use the same top-left coverage rule.
     gpu.reset();
     gpu.writeGp0(0xE3000000u);
