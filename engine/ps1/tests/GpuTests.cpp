@@ -951,5 +951,39 @@ int main() {
     assert(gpu.copyDisplayToRgba8888(frame.data(), frame.size(), frameWidth, frameHeight));
     assert(frameWidth == 256u && frameHeight == 512u);
 
+    // Rasterizer winding regression: the same right triangle must cover
+    // identical local pixels when its vertex order is reversed.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    gpu.writeGp0(0x200000FFu);
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(120u | (100u << 16u));
+    gpu.writeGp0(100u | (120u << 16u));
+    gpu.writeGp0(0x200000FFu);
+    gpu.writeGp0(220u | (100u << 16u));
+    gpu.writeGp0(200u | (120u << 16u));
+    gpu.writeGp0(200u | (100u << 16u));
+    for (std::uint32_t y = 0; y <= 20u; ++y) {
+        for (std::uint32_t x = 0; x <= 20u; ++x) {
+            std::uint16_t forward = 0, reversed = 0;
+            assert(vram.readPixel(100u + x, 100u + y, forward));
+            assert(vram.readPixel(200u + x, 100u + y, reversed));
+            assert(forward == reversed);
+        }
+    }
+
+    // A zero-area triangle must not write pixels.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    gpu.writeGp0(0x200000FFu);
+    gpu.writeGp0(300u | (300u << 16u));
+    gpu.writeGp0(310u | (310u << 16u));
+    gpu.writeGp0(320u | (320u << 16u));
+    assert(vram.readPixel(310u, 310u, pixel) && pixel == 0u);
+
     return 0;
 }
