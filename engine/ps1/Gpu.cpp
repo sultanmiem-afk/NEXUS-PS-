@@ -558,6 +558,7 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
         ++unsupportedCommandCount_;
         return;
     }
+    const std::uint16_t* const vramPixels = vram_.data();
     const long long area = edgeFunction(x[0], y[0], x[1], y[1], x[2], y[2]);
     if (area == 0) return;
     const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
@@ -580,6 +581,7 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
     const std::uint32_t clutX = (clut & 0x3Fu) * 16u;
     const std::uint32_t clutY = (clut >> 6) & 0x1FFu;
 
+    const long long denominator = area > 0 ? area : -area;
     const bool positiveInterior = area > 0;
     const bool edge0Inclusive = isTopLeftEdge(x[1], y[1], x[2], y[2], positiveInterior);
     const bool edge1Inclusive = isTopLeftEdge(x[2], y[2], x[0], y[0], positiveInterior);
@@ -599,9 +601,8 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                 edgePassesTopLeft(w2, edge2Inclusive, positiveInterior);
             if (inside) {
                 if (area < 0) { w0 = -w0; w1 = -w1; w2 = -w2; }
-                const long long den = area > 0 ? area : -area;
-                int tu = static_cast<int>((w0 * u[0] + w1 * u[1] + w2 * u[2]) / den) & 0xFF;
-                int tv = static_cast<int>((w0 * v[0] + w1 * v[1] + w2 * v[2]) / den) & 0xFF;
+                int tu = static_cast<int>((w0 * u[0] + w1 * u[1] + w2 * u[2]) / denominator) & 0xFF;
+                int tv = static_cast<int>((w0 * v[0] + w1 * v[1] + w2 * v[2]) / denominator) & 0xFF;
                 tu = (tu & ~static_cast<int>(windowMaskX << 3)) |
                      static_cast<int>((windowOffX & windowMaskX) << 3);
                 tv = (tv & ~static_cast<int>(windowMaskY << 3)) |
@@ -611,30 +612,17 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                 if (depth == 2u) {
                     const std::uint32_t tx = static_cast<std::uint32_t>((pageX + tu) % static_cast<int>(Vram::kWidth));
                     const std::uint32_t ty = static_cast<std::uint32_t>((pageY + tv) % static_cast<int>(Vram::kHeight));
-                    vram_.readPixel(tx, ty, texel);
+                    texel = vramPixels[static_cast<std::size_t>(ty) * Vram::kWidth + tx];
                 } else {
                     const unsigned pixelsPerWord = depth == 0u ? 4u : 2u;
                     const unsigned bitsPerPixel = depth == 0u ? 4u : 8u;
                     const std::uint32_t wordX = static_cast<std::uint32_t>((pageX + tu / static_cast<int>(pixelsPerWord)) % static_cast<int>(Vram::kWidth));
                     const std::uint32_t wordY = static_cast<std::uint32_t>((pageY + tv) % static_cast<int>(Vram::kHeight));
-                    std::uint16_t packed = 0;
-                    if (!vram_.readPixel(wordX, wordY, packed)) {
-                        w0 = area < 0 ? -w0 : w0;
-                        w1 = area < 0 ? -w1 : w1;
-                        w2 = area < 0 ? -w2 : w2;
-                        w0 += edge0StepX; w1 += edge1StepX; w2 += edge2StepX;
-                        continue;
-                    }
+                    const std::uint16_t packed = vramPixels[static_cast<std::size_t>(wordY) * Vram::kWidth + wordX];
                     const unsigned shift = static_cast<unsigned>(tu % static_cast<int>(pixelsPerWord)) * bitsPerPixel;
                     const std::uint16_t paletteIndex = static_cast<std::uint16_t>((packed >> shift) & (depth == 0u ? 0xFu : 0xFFu));
                     const std::uint32_t paletteX = (clutX + paletteIndex) % Vram::kWidth;
-                    if (!vram_.readPixel(paletteX, clutY, texel)) {
-                        w0 = area < 0 ? -w0 : w0;
-                        w1 = area < 0 ? -w1 : w1;
-                        w2 = area < 0 ? -w2 : w2;
-                        w0 += edge0StepX; w1 += edge1StepX; w2 += edge2StepX;
-                        continue;
-                    }
+                    texel = vramPixels[static_cast<std::size_t>(clutY) * Vram::kWidth + paletteX];
                 }
                 if (texel != 0) {
                     const bool texelStp = (texel & 0x8000u) != 0;
@@ -666,9 +654,9 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                     }
                     const std::uint32_t dx = static_cast<std::uint32_t>(px);
                     const std::uint32_t dy = static_cast<std::uint32_t>(py);
-                    std::uint16_t destination = 0;
-                    if (vram_.readPixel(dx, dy, destination) &&
-                        !((maskSetting_ & 0x02u) != 0 && (destination & 0x8000u) != 0)) {
+                    const std::size_t destinationIndex = static_cast<std::size_t>(dy) * Vram::kWidth + dx;
+                    const std::uint16_t destination = vramPixels[destinationIndex];
+                    if (!((maskSetting_ & 0x02u) != 0 && (destination & 0x8000u) != 0)) {
                         if (semiTransparent && texelStp) {
                             const std::uint32_t mode = (page >> 5) & 3u;
                             const std::uint32_t sr = texel & 31u, sg = (texel >> 5) & 31u, sb = (texel >> 10) & 31u;
@@ -684,7 +672,7 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                             texel = static_cast<std::uint16_t>(blend(sr, dr) | (blend(sg, dg) << 5) | (blend(sb, db) << 10));
                         }
                         if ((maskSetting_ & 0x01u) != 0 || texelStp) texel |= 0x8000u;
-                        vram_.writePixel(dx, dy, texel);
+                        vram_.data()[destinationIndex] = texel;
                     }
                 }
                 // Restore signed edge values before the incremental step.
