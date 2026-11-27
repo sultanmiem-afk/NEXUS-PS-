@@ -577,7 +577,6 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
     const std::uint32_t windowMaskY = (textureWindow_ >> 5) & 0x1Fu;
     const std::uint32_t windowOffX = (textureWindow_ >> 10) & 0x1Fu;
     const std::uint32_t windowOffY = (textureWindow_ >> 15) & 0x1Fu;
-    // CLUT coordinates are supplied in the high half of the first UV word.
     const std::uint32_t clut = packet_[2] >> 16;
     const std::uint32_t clutX = (clut & 0x3Fu) * 16u;
     const std::uint32_t clutY = (clut >> 6) & 0x1FFu;
@@ -591,92 +590,107 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
     long long rowW0 = edgeFunction(x[1], y[1], x[2], y[2], minX, minY);
     long long rowW1 = edgeFunction(x[2], y[2], x[0], y[0], minX, minY);
     long long rowW2 = edgeFunction(x[0], y[0], x[1], y[1], minX, minY);
-    for (int py=minY; py<=maxY; ++py) {
+
+    for (int py = minY; py <= maxY; ++py) {
         long long w0 = rowW0, w1 = rowW1, w2 = rowW2;
-        for (int px=minX; px<=maxX; ++px) {
+        for (int px = minX; px <= maxX; ++px) {
             const bool inside =
                 edgePassesTopLeft(w0, edge0Inclusive, positiveInterior) &&
                 edgePassesTopLeft(w1, edge1Inclusive, positiveInterior) &&
                 edgePassesTopLeft(w2, edge2Inclusive, positiveInterior);
             if (inside) {
-                long long normalizedW0 = w0, normalizedW1 = w1, normalizedW2 = w2;
-                if (area < 0) { normalizedW0=-normalizedW0; normalizedW1=-normalizedW1; normalizedW2=-normalizedW2; }
-        const long long den=area>0?area:-area;
-        int tu=static_cast<int>((w0*u[0]+w1*u[1]+w2*u[2])/den) & 0xFF;
-        int tv=static_cast<int>((w0*v[0]+w1*v[1]+w2*v[2])/den) & 0xFF;
-        tu = (tu & ~static_cast<int>(windowMaskX << 3)) |
-             static_cast<int>((windowOffX & windowMaskX) << 3);
-        tv = (tv & ~static_cast<int>(windowMaskY << 3)) |
-             static_cast<int>((windowOffY & windowMaskY) << 3);
+                if (area < 0) { w0 = -w0; w1 = -w1; w2 = -w2; }
+                const long long den = area > 0 ? area : -area;
+                int tu = static_cast<int>((w0 * u[0] + w1 * u[1] + w2 * u[2]) / den) & 0xFF;
+                int tv = static_cast<int>((w0 * v[0] + w1 * v[1] + w2 * v[2]) / den) & 0xFF;
+                tu = (tu & ~static_cast<int>(windowMaskX << 3)) |
+                     static_cast<int>((windowOffX & windowMaskX) << 3);
+                tv = (tv & ~static_cast<int>(windowMaskY << 3)) |
+                     static_cast<int>((windowOffY & windowMaskY) << 3);
 
-        std::uint16_t texel = 0;
-        if (depth == 2u) {
-            const std::uint32_t tx=static_cast<std::uint32_t>((pageX+tu)%static_cast<int>(Vram::kWidth));
-            const std::uint32_t ty=static_cast<std::uint32_t>((pageY+tv)%static_cast<int>(Vram::kHeight));
-            vram_.readPixel(tx,ty,texel);
-        } else {
-            const unsigned pixelsPerWord = depth == 0u ? 4u : 2u;
-            const unsigned bitsPerPixel = depth == 0u ? 4u : 8u;
-            const std::uint32_t wordX=static_cast<std::uint32_t>((pageX + tu / static_cast<int>(pixelsPerWord)) % static_cast<int>(Vram::kWidth));
-            const std::uint32_t wordY=static_cast<std::uint32_t>((pageY+tv)%static_cast<int>(Vram::kHeight));
-            std::uint16_t packed = 0;
-            if (!vram_.readPixel(wordX,wordY,packed)) continue;
-            const unsigned shift=static_cast<unsigned>(tu % static_cast<int>(pixelsPerWord))*bitsPerPixel;
-            const std::uint16_t paletteIndex=static_cast<std::uint16_t>((packed >> shift) & (depth==0u?0xFu:0xFFu));
-            const std::uint32_t paletteX=(clutX+paletteIndex)%Vram::kWidth;
-            if (!vram_.readPixel(paletteX,clutY,texel)) continue;
-        }
-        // PS1 texture index/color zero is transparent.
-        if (texel != 0) {
-            const bool texelStp = (texel & 0x8000u) != 0;
-            if (!rawTexture) {
-                std::uint32_t modulation = packet_[0];
-                if (colors != nullptr) {
-                    const std::uint64_t den = static_cast<std::uint64_t>(area > 0 ? area : -area);
-                    modulation = 0;
-                    for (unsigned ch = 0; ch < 3; ++ch) {
-                        const std::uint64_t a = (colors[0] >> (ch * 8u)) & 0xFFu;
-                        const std::uint64_t b = (colors[1] >> (ch * 8u)) & 0xFFu;
-                        const std::uint64_t c = (colors[2] >> (ch * 8u)) & 0xFFu;
-                        const std::uint64_t value = (a * static_cast<std::uint64_t>(normalizedW0) +
-                            b * static_cast<std::uint64_t>(normalizedW1) +
-                            c * static_cast<std::uint64_t>(normalizedW2)) / den;
-                        modulation |= static_cast<std::uint32_t>(value) << (ch * 8u);
+                std::uint16_t texel = 0;
+                if (depth == 2u) {
+                    const std::uint32_t tx = static_cast<std::uint32_t>((pageX + tu) % static_cast<int>(Vram::kWidth));
+                    const std::uint32_t ty = static_cast<std::uint32_t>((pageY + tv) % static_cast<int>(Vram::kHeight));
+                    vram_.readPixel(tx, ty, texel);
+                } else {
+                    const unsigned pixelsPerWord = depth == 0u ? 4u : 2u;
+                    const unsigned bitsPerPixel = depth == 0u ? 4u : 8u;
+                    const std::uint32_t wordX = static_cast<std::uint32_t>((pageX + tu / static_cast<int>(pixelsPerWord)) % static_cast<int>(Vram::kWidth));
+                    const std::uint32_t wordY = static_cast<std::uint32_t>((pageY + tv) % static_cast<int>(Vram::kHeight));
+                    std::uint16_t packed = 0;
+                    if (!vram_.readPixel(wordX, wordY, packed)) {
+                        w0 = area < 0 ? -w0 : w0;
+                        w1 = area < 0 ? -w1 : w1;
+                        w2 = area < 0 ? -w2 : w2;
+                        w0 += edge0StepX; w1 += edge1StepX; w2 += edge2StepX;
+                        continue;
+                    }
+                    const unsigned shift = static_cast<unsigned>(tu % static_cast<int>(pixelsPerWord)) * bitsPerPixel;
+                    const std::uint16_t paletteIndex = static_cast<std::uint16_t>((packed >> shift) & (depth == 0u ? 0xFu : 0xFFu));
+                    const std::uint32_t paletteX = (clutX + paletteIndex) % Vram::kWidth;
+                    if (!vram_.readPixel(paletteX, clutY, texel)) {
+                        w0 = area < 0 ? -w0 : w0;
+                        w1 = area < 0 ? -w1 : w1;
+                        w2 = area < 0 ? -w2 : w2;
+                        w0 += edge0StepX; w1 += edge1StepX; w2 += edge2StepX;
+                        continue;
                     }
                 }
-                const std::uint32_t tr = texel & 31u;
-                const std::uint32_t tg = (texel >> 5) & 31u;
-                const std::uint32_t tb = (texel >> 10) & 31u;
-                const std::uint32_t cr = modulation & 0xFFu;
-                const std::uint32_t cg = (modulation >> 8) & 0xFFu;
-                const std::uint32_t cb = (modulation >> 16) & 0xFFu;
-                const std::uint32_t r = std::min(31u, (tr * cr) / 128u);
-                const std::uint32_t g = std::min(31u, (tg * cg) / 128u);
-                const std::uint32_t b = std::min(31u, (tb * cb) / 128u);
-                texel = static_cast<std::uint16_t>(r | (g << 5) | (b << 10));
-            }
-            const std::uint32_t dx = static_cast<std::uint32_t>(px);
-            const std::uint32_t dy = static_cast<std::uint32_t>(py);
-            std::uint16_t destination = 0;
-            if (!vram_.readPixel(dx, dy, destination)) continue;
-            if ((maskSetting_ & 0x02u) != 0 && (destination & 0x8000u) != 0) continue;
-            if (semiTransparent && texelStp) {
-                const std::uint32_t mode = (page >> 5) & 3u;
-                const std::uint32_t sr = texel & 31u, sg = (texel >> 5) & 31u, sb = (texel >> 10) & 31u;
-                const std::uint32_t dr = destination & 31u, dg = (destination >> 5) & 31u, db = (destination >> 10) & 31u;
-                auto blend = [mode](std::uint32_t source, std::uint32_t dest) noexcept {
-                    switch (mode) {
-                    case 0: return (source + dest) >> 1;
-                    case 1: return std::min(31u, source + dest);
-                    case 2: return dest > source ? dest - source : 0u;
-                    default: return std::min(31u, dest + (source >> 2));
+                if (texel != 0) {
+                    const bool texelStp = (texel & 0x8000u) != 0;
+                    if (!rawTexture) {
+                        std::uint32_t modulation = packet_[0];
+                        if (colors != nullptr) {
+                            const std::uint64_t den = static_cast<std::uint64_t>(area > 0 ? area : -area);
+                            modulation = 0;
+                            for (unsigned ch = 0; ch < 3; ++ch) {
+                                const std::uint64_t a = (colors[0] >> (ch * 8u)) & 0xFFu;
+                                const std::uint64_t b = (colors[1] >> (ch * 8u)) & 0xFFu;
+                                const std::uint64_t cc = (colors[2] >> (ch * 8u)) & 0xFFu;
+                                const std::uint64_t value = (a * static_cast<std::uint64_t>(w0) +
+                                    b * static_cast<std::uint64_t>(w1) +
+                                    cc * static_cast<std::uint64_t>(w2)) / den;
+                                modulation |= static_cast<std::uint32_t>(value) << (ch * 8u);
+                            }
+                        }
+                        const std::uint32_t tr = texel & 31u;
+                        const std::uint32_t tg = (texel >> 5) & 31u;
+                        const std::uint32_t tb = (texel >> 10) & 31u;
+                        const std::uint32_t cr = modulation & 0xFFu;
+                        const std::uint32_t cg = (modulation >> 8) & 0xFFu;
+                        const std::uint32_t cb = (modulation >> 16) & 0xFFu;
+                        const std::uint32_t r = std::min(31u, (tr * cr) / 128u);
+                        const std::uint32_t g = std::min(31u, (tg * cg) / 128u);
+                        const std::uint32_t b = std::min(31u, (tb * cb) / 128u);
+                        texel = static_cast<std::uint16_t>(r | (g << 5) | (b << 10));
                     }
-                };
-                texel = static_cast<std::uint16_t>(blend(sr,dr) | (blend(sg,dg)<<5) | (blend(sb,db)<<10));
+                    const std::uint32_t dx = static_cast<std::uint32_t>(px);
+                    const std::uint32_t dy = static_cast<std::uint32_t>(py);
+                    std::uint16_t destination = 0;
+                    if (vram_.readPixel(dx, dy, destination) &&
+                        !((maskSetting_ & 0x02u) != 0 && (destination & 0x8000u) != 0)) {
+                        if (semiTransparent && texelStp) {
+                            const std::uint32_t mode = (page >> 5) & 3u;
+                            const std::uint32_t sr = texel & 31u, sg = (texel >> 5) & 31u, sb = (texel >> 10) & 31u;
+                            const std::uint32_t dr = destination & 31u, dg = (destination >> 5) & 31u, db = (destination >> 10) & 31u;
+                            const auto blend = [mode](std::uint32_t source, std::uint32_t dest) noexcept {
+                                switch (mode) {
+                                    case 0: return (source + dest) >> 1;
+                                    case 1: return std::min(31u, source + dest);
+                                    case 2: return dest > source ? dest - source : 0u;
+                                    default: return std::min(31u, dest + (source >> 2));
+                                }
+                            };
+                            texel = static_cast<std::uint16_t>(blend(sr, dr) | (blend(sg, dg) << 5) | (blend(sb, db) << 10));
+                        }
+                        if ((maskSetting_ & 0x01u) != 0 || texelStp) texel |= 0x8000u;
+                        vram_.writePixel(dx, dy, texel);
+                    }
+                }
+                // Restore signed edge values before the incremental step.
+                if (area < 0) { w0 = -w0; w1 = -w1; w2 = -w2; }
             }
-            if ((maskSetting_ & 0x01u) != 0 || texelStp) texel |= 0x8000u;
-            vram_.writePixel(dx, dy, texel);
-        }
             w0 += edge0StepX; w1 += edge1StepX; w2 += edge2StepX;
         }
         rowW0 += edge0StepY; rowW1 += edge1StepY; rowW2 += edge2StepY;
@@ -715,6 +729,7 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
                               int x2, int y2, std::uint32_t c2, bool semiTransparent) noexcept {
     const long long area = edgeFunction(x0, y0, x1, y1, x2, y2);
     if (area == 0) return;
+
     const int left = static_cast<int>(drawAreaTopLeft_ & 0x3FFu);
     const int top = static_cast<int>((drawAreaTopLeft_ >> 10) & 0x1FFu);
     const int right = static_cast<int>(drawAreaBottomRight_ & 0x3FFu);
@@ -726,6 +741,7 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
     const int maxY = std::min({static_cast<int>(Vram::kHeight) - 1, bottom,
                                std::max({y0, y1, y2})});
     if (minX > maxX || minY > maxY) return;
+
     const std::uint32_t channel0[3] = {c0 & 0xFFu, (c0 >> 8) & 0xFFu, (c0 >> 16) & 0xFFu};
     const std::uint32_t channel1[3] = {c1 & 0xFFu, (c1 >> 8) & 0xFFu, (c1 >> 16) & 0xFFu};
     const std::uint32_t channel2[3] = {c2 & 0xFFu, (c2 >> 8) & 0xFFu, (c2 >> 16) & 0xFFu};
@@ -738,6 +754,8 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
     long long rowW0 = edgeFunction(x1, y1, x2, y2, minX, minY);
     long long rowW1 = edgeFunction(x2, y2, x0, y0, minX, minY);
     long long rowW2 = edgeFunction(x0, y0, x1, y1, minX, minY);
+    const std::uint64_t denominator = static_cast<std::uint64_t>(area > 0 ? area : -area);
+
     for (int py = minY; py <= maxY; ++py) {
         long long w0 = rowW0, w1 = rowW1, w2 = rowW2;
         for (int px = minX; px <= maxX; ++px) {
@@ -746,17 +764,16 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
                 edgePassesTopLeft(w1, edge1Inclusive, positiveInterior) &&
                 edgePassesTopLeft(w2, edge2Inclusive, positiveInterior);
             if (inside) {
-                long long normalizedW0 = w0, normalizedW1 = w1, normalizedW2 = w2;
-                if (area < 0) { normalizedW0 = -normalizedW0; normalizedW1 = -normalizedW1; normalizedW2 = -normalizedW2; }
-                const std::uint64_t denominator = static_cast<std::uint64_t>(area > 0 ? area : -area);
+                const long long nw0 = area < 0 ? -w0 : w0;
+                const long long nw1 = area < 0 ? -w1 : w1;
+                const long long nw2 = area < 0 ? -w2 : w2;
                 std::uint32_t rgb = 0;
                 for (int channel = 0; channel < 3; ++channel) {
                     const std::uint64_t weighted =
-                        static_cast<std::uint64_t>(channel0[channel]) * static_cast<std::uint64_t>(normalizedW0) +
-                        static_cast<std::uint64_t>(channel1[channel]) * static_cast<std::uint64_t>(normalizedW1) +
-                        static_cast<std::uint64_t>(channel2[channel]) * static_cast<std::uint64_t>(normalizedW2);
-                    const std::uint32_t value = static_cast<std::uint32_t>(weighted / denominator);
-                    rgb |= value << (channel * 8);
+                        static_cast<std::uint64_t>(channel0[channel]) * static_cast<std::uint64_t>(nw0) +
+                        static_cast<std::uint64_t>(channel1[channel]) * static_cast<std::uint64_t>(nw1) +
+                        static_cast<std::uint64_t>(channel2[channel]) * static_cast<std::uint64_t>(nw2);
+                    rgb |= static_cast<std::uint32_t>(weighted / denominator) << (channel * 8);
                 }
                 const std::uint16_t output = (drawMode_ & (1u << 9)) != 0
                     ? ditheredColor24To15(rgb, px, py)
@@ -767,9 +784,6 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
         }
         rowW0 += edge0StepY; rowW1 += edge1StepY; rowW2 += edge2StepY;
     }
-    return;
-    /*
-
 }
 
 void Gpu::executeRectangle() noexcept {
