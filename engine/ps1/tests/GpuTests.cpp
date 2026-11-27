@@ -891,6 +891,16 @@ int main() {
     gpu.writeGp0(1u | (1u << 16u));
     assert(vram.readPixel(62u, 60u, pixel) && pixel == 0x9234u);
 
+    // Flat line primitives use the GPU dither matrix when enabled.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u);
+    gpu.writeGp0(0xE1000200u); // Enable dithering.
+    gpu.writeGp0(0x40000080u); // Flat line, red=128.
+    gpu.writeGp0(0u);
+    gpu.writeGp0(0u); // Zero-length line still draws exactly one pixel.
+    assert(vram.readPixel(0u, 0u, pixel) && pixel == 15u);
+
     // Adjacent triangles in a quad must own a shared edge exactly once.
     // Semi-transparency makes a double-covered diagonal immediately visible.
     gpu.reset();
