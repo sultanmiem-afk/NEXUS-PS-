@@ -489,5 +489,19 @@ int main() {
     assert(system.cpu().state().gpr[2] == 50u);
     assert(system.cpu().state().pc == 8u);
 
+    // GPU IRQ output is latched into I_STAT source bit 1 by the machine.
+    system.reset(0x00000000u);
+    system.gpu().writeGp0(0x1F000000u);
+    assert(system.gpu().irqPending());
+    assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert((system.memory().interrupts().status() & (1u << 1)) != 0u);
+    system.gpu().writeGp1(0x02000000u); // Acknowledge GPU's own IRQ output.
+    assert(!system.gpu().irqPending());
+    assert(system.memory().write32(InterruptController::kStatusAddress, ~(1u << 1)));
+    assert((system.memory().interrupts().status() & (1u << 1)) == 0u);
+    system.gpu().writeGp0(0x1F000000u);
+    assert(system.step().cpu.status == CpuStepStatus::Executed);
+    assert((system.memory().interrupts().status() & (1u << 1)) != 0u);
+
     return 0;
 }
