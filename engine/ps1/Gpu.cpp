@@ -481,23 +481,31 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
                                std::max({y0, y1, y2})});
     if (minX > maxX || minY > maxY) return;
 
+    const bool positiveInterior = area > 0;
+    const bool edge0Inclusive = isTopLeftEdge(x0, y0, x1, y1, positiveInterior);
+    const bool edge1Inclusive = isTopLeftEdge(x1, y1, x2, y2, positiveInterior);
+    const bool edge2Inclusive = isTopLeftEdge(x2, y2, x0, y0, positiveInterior);
+    const int edge0StepX = y1 - y0, edge1StepX = y2 - y1, edge2StepX = y0 - y2;
+    const int edge0StepY = x0 - x1, edge1StepY = x1 - x2, edge2StepY = x2 - x0;
+    long long rowE0 = edgeFunction(x0, y0, x1, y1, minX, minY);
+    long long rowE1 = edgeFunction(x1, y1, x2, y2, minX, minY);
+    long long rowE2 = edgeFunction(x2, y2, x0, y0, minX, minY);
     for (int py = minY; py <= maxY; ++py) {
+        long long e0 = rowE0, e1 = rowE1, e2 = rowE2;
         for (int px = minX; px <= maxX; ++px) {
-            const long long e0 = edgeFunction(x0, y0, x1, y1, px, py);
-            const long long e1 = edgeFunction(x1, y1, x2, y2, px, py);
-            const long long e2 = edgeFunction(x2, y2, x0, y0, px, py);
-            const bool positiveInterior = area > 0;
             const bool inside =
-                edgePassesTopLeft(e0, isTopLeftEdge(x0, y0, x1, y1, positiveInterior), positiveInterior) &&
-                edgePassesTopLeft(e1, isTopLeftEdge(x1, y1, x2, y2, positiveInterior), positiveInterior) &&
-                edgePassesTopLeft(e2, isTopLeftEdge(x2, y2, x0, y0, positiveInterior), positiveInterior);
+                edgePassesTopLeft(e0, edge0Inclusive, positiveInterior) &&
+                edgePassesTopLeft(e1, edge1Inclusive, positiveInterior) &&
+                edgePassesTopLeft(e2, edge2Inclusive, positiveInterior);
             if (inside) {
                 const std::uint16_t color = (drawMode_ & (1u << 9)) != 0
                     ? ditheredColor24To15(rgb, px, py)
                     : static_cast<std::uint16_t>(color24To15(rgb));
                 writeDrawPixel(px, py, color, semiTransparent);
             }
+            e0 += edge0StepX; e1 += edge1StepX; e2 += edge2StepX;
         }
+        rowE0 += edge0StepY; rowE1 += edge1StepY; rowE2 += edge2StepY;
     }
 }
 
@@ -574,17 +582,25 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
     const std::uint32_t clutX = (clut & 0x3Fu) * 16u;
     const std::uint32_t clutY = (clut >> 6) & 0x1FFu;
 
-    for (int py=minY; py<=maxY; ++py) for (int px=minX; px<=maxX; ++px) {
-        long long w0=edgeFunction(x[1],y[1],x[2],y[2],px,py);
-        long long w1=edgeFunction(x[2],y[2],x[0],y[0],px,py);
-        long long w2=edgeFunction(x[0],y[0],x[1],y[1],px,py);
-        const bool positiveInterior = area > 0;
-        const bool inside =
-            edgePassesTopLeft(w0, isTopLeftEdge(x[1], y[1], x[2], y[2], positiveInterior), positiveInterior) &&
-            edgePassesTopLeft(w1, isTopLeftEdge(x[2], y[2], x[0], y[0], positiveInterior), positiveInterior) &&
-            edgePassesTopLeft(w2, isTopLeftEdge(x[0], y[0], x[1], y[1], positiveInterior), positiveInterior);
-        if (!inside) continue;
-        if (area<0) { w0=-w0; w1=-w1; w2=-w2; }
+    const bool positiveInterior = area > 0;
+    const bool edge0Inclusive = isTopLeftEdge(x[1], y[1], x[2], y[2], positiveInterior);
+    const bool edge1Inclusive = isTopLeftEdge(x[2], y[2], x[0], y[0], positiveInterior);
+    const bool edge2Inclusive = isTopLeftEdge(x[0], y[0], x[1], y[1], positiveInterior);
+    const int edge0StepX = y[2] - y[1], edge1StepX = y[0] - y[2], edge2StepX = y[1] - y[0];
+    const int edge0StepY = x[1] - x[2], edge1StepY = x[2] - x[0], edge2StepY = x[0] - x[1];
+    long long rowW0 = edgeFunction(x[1], y[1], x[2], y[2], minX, minY);
+    long long rowW1 = edgeFunction(x[2], y[2], x[0], y[0], minX, minY);
+    long long rowW2 = edgeFunction(x[0], y[0], x[1], y[1], minX, minY);
+    for (int py=minY; py<=maxY; ++py) {
+        long long w0 = rowW0, w1 = rowW1, w2 = rowW2;
+        for (int px=minX; px<=maxX; ++px) {
+            const bool inside =
+                edgePassesTopLeft(w0, edge0Inclusive, positiveInterior) &&
+                edgePassesTopLeft(w1, edge1Inclusive, positiveInterior) &&
+                edgePassesTopLeft(w2, edge2Inclusive, positiveInterior);
+            if (inside) {
+                long long normalizedW0 = w0, normalizedW1 = w1, normalizedW2 = w2;
+                if (area < 0) { normalizedW0=-normalizedW0; normalizedW1=-normalizedW1; normalizedW2=-normalizedW2; }
         const long long den=area>0?area:-area;
         int tu=static_cast<int>((w0*u[0]+w1*u[1]+w2*u[2])/den) & 0xFF;
         int tv=static_cast<int>((w0*v[0]+w1*v[1]+w2*v[2])/den) & 0xFF;
@@ -622,9 +638,9 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
                         const std::uint64_t a = (colors[0] >> (ch * 8u)) & 0xFFu;
                         const std::uint64_t b = (colors[1] >> (ch * 8u)) & 0xFFu;
                         const std::uint64_t c = (colors[2] >> (ch * 8u)) & 0xFFu;
-                        const std::uint64_t value = (a * static_cast<std::uint64_t>(w0) +
-                            b * static_cast<std::uint64_t>(w1) +
-                            c * static_cast<std::uint64_t>(w2)) / den;
+                        const std::uint64_t value = (a * static_cast<std::uint64_t>(normalizedW0) +
+                            b * static_cast<std::uint64_t>(normalizedW1) +
+                            c * static_cast<std::uint64_t>(normalizedW2)) / den;
                         modulation |= static_cast<std::uint32_t>(value) << (ch * 8u);
                     }
                 }
@@ -661,6 +677,9 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
             if ((maskSetting_ & 0x01u) != 0 || texelStp) texel |= 0x8000u;
             vram_.writePixel(dx, dy, texel);
         }
+            w0 += edge0StepX; w1 += edge1StepX; w2 += edge2StepX;
+        }
+        rowW0 += edge0StepY; rowW1 += edge1StepY; rowW2 += edge2StepY;
     }
 }
 
@@ -710,34 +729,47 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
     const std::uint32_t channel0[3] = {c0 & 0xFFu, (c0 >> 8) & 0xFFu, (c0 >> 16) & 0xFFu};
     const std::uint32_t channel1[3] = {c1 & 0xFFu, (c1 >> 8) & 0xFFu, (c1 >> 16) & 0xFFu};
     const std::uint32_t channel2[3] = {c2 & 0xFFu, (c2 >> 8) & 0xFFu, (c2 >> 16) & 0xFFu};
+    const bool positiveInterior = area > 0;
+    const bool edge0Inclusive = isTopLeftEdge(x1, y1, x2, y2, positiveInterior);
+    const bool edge1Inclusive = isTopLeftEdge(x2, y2, x0, y0, positiveInterior);
+    const bool edge2Inclusive = isTopLeftEdge(x0, y0, x1, y1, positiveInterior);
+    const int edge0StepX = y2 - y1, edge1StepX = y0 - y2, edge2StepX = y1 - y0;
+    const int edge0StepY = x1 - x2, edge1StepY = x2 - x0, edge2StepY = x0 - x1;
+    long long rowW0 = edgeFunction(x1, y1, x2, y2, minX, minY);
+    long long rowW1 = edgeFunction(x2, y2, x0, y0, minX, minY);
+    long long rowW2 = edgeFunction(x0, y0, x1, y1, minX, minY);
     for (int py = minY; py <= maxY; ++py) {
+        long long w0 = rowW0, w1 = rowW1, w2 = rowW2;
         for (int px = minX; px <= maxX; ++px) {
-            long long w2 = edgeFunction(x0, y0, x1, y1, px, py);
-            long long w0 = edgeFunction(x1, y1, x2, y2, px, py);
-            long long w1 = edgeFunction(x2, y2, x0, y0, px, py);
-            const bool positiveInterior = area > 0;
             const bool inside =
-                edgePassesTopLeft(w0, isTopLeftEdge(x1, y1, x2, y2, positiveInterior), positiveInterior) &&
-                edgePassesTopLeft(w1, isTopLeftEdge(x2, y2, x0, y0, positiveInterior), positiveInterior) &&
-                edgePassesTopLeft(w2, isTopLeftEdge(x0, y0, x1, y1, positiveInterior), positiveInterior);
-            if (!inside) continue;
-            if (area < 0) { w0 = -w0; w1 = -w1; w2 = -w2; }
-            const std::uint64_t denominator = static_cast<std::uint64_t>(area > 0 ? area : -area);
-            std::uint32_t rgb = 0;
-            for (int channel = 0; channel < 3; ++channel) {
-                const std::uint64_t weighted =
-                    static_cast<std::uint64_t>(channel0[channel]) * static_cast<std::uint64_t>(w0) +
-                    static_cast<std::uint64_t>(channel1[channel]) * static_cast<std::uint64_t>(w1) +
-                    static_cast<std::uint64_t>(channel2[channel]) * static_cast<std::uint64_t>(w2);
-                const std::uint32_t value = static_cast<std::uint32_t>(weighted / denominator);
-                rgb |= value << (channel * 8);
+                edgePassesTopLeft(w0, edge0Inclusive, positiveInterior) &&
+                edgePassesTopLeft(w1, edge1Inclusive, positiveInterior) &&
+                edgePassesTopLeft(w2, edge2Inclusive, positiveInterior);
+            if (inside) {
+                long long normalizedW0 = w0, normalizedW1 = w1, normalizedW2 = w2;
+                if (area < 0) { normalizedW0 = -normalizedW0; normalizedW1 = -normalizedW1; normalizedW2 = -normalizedW2; }
+                const std::uint64_t denominator = static_cast<std::uint64_t>(area > 0 ? area : -area);
+                std::uint32_t rgb = 0;
+                for (int channel = 0; channel < 3; ++channel) {
+                    const std::uint64_t weighted =
+                        static_cast<std::uint64_t>(channel0[channel]) * static_cast<std::uint64_t>(normalizedW0) +
+                        static_cast<std::uint64_t>(channel1[channel]) * static_cast<std::uint64_t>(normalizedW1) +
+                        static_cast<std::uint64_t>(channel2[channel]) * static_cast<std::uint64_t>(normalizedW2);
+                    const std::uint32_t value = static_cast<std::uint32_t>(weighted / denominator);
+                    rgb |= value << (channel * 8);
+                }
+                const std::uint16_t output = (drawMode_ & (1u << 9)) != 0
+                    ? ditheredColor24To15(rgb, px, py)
+                    : static_cast<std::uint16_t>(color24To15(rgb));
+                writeDrawPixel(px, py, output, semiTransparent);
             }
-            const std::uint16_t output = (drawMode_ & (1u << 9)) != 0
-                ? ditheredColor24To15(rgb, px, py)
-                : static_cast<std::uint16_t>(color24To15(rgb));
-            writeDrawPixel(px, py, output, semiTransparent);
+            w0 += edge0StepX; w1 += edge1StepX; w2 += edge2StepX;
         }
+        rowW0 += edge0StepY; rowW1 += edge1StepY; rowW2 += edge2StepY;
     }
+    return;
+    /*
+
 }
 
 void Gpu::executeRectangle() noexcept {
