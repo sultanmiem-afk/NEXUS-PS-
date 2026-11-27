@@ -402,6 +402,23 @@ long long edgeFunction(int ax, int ay, int bx, int by,
            static_cast<long long>(py - ay) * (bx - ax);
 }
 
+bool isTopLeftEdge(int ax, int ay, int bx, int by, bool reverse) noexcept {
+    if (reverse) {
+        std::swap(ax, bx);
+        std::swap(ay, by);
+    }
+    const int dx = bx - ax;
+    const int dy = by - ay;
+    // VRAM coordinates grow downward. This convention assigns a shared
+    // horizontal/diagonal edge to exactly one of its adjacent triangles.
+    return dy < 0 || (dy == 0 && dx > 0);
+}
+
+bool edgePassesTopLeft(long long edge, bool inclusive, bool positiveInterior) noexcept {
+    const long long normalized = positiveInterior ? edge : -edge;
+    return normalized > 0 || (normalized == 0 && inclusive);
+}
+
 std::uint16_t ditheredColor24To15(std::uint32_t rgb, int x, int y) noexcept {
     // PS1 4x4 signed dither matrix, applied before reducing 8-bit channels
     // to the 5-bit RGB values stored in VRAM.
@@ -467,9 +484,11 @@ void Gpu::drawTriangle(int x0, int y0, int x1, int y1,
             const long long e0 = edgeFunction(x0, y0, x1, y1, px, py);
             const long long e1 = edgeFunction(x1, y1, x2, y2, px, py);
             const long long e2 = edgeFunction(x2, y2, x0, y0, px, py);
-            const bool inside = area > 0
-                ? (e0 >= 0 && e1 >= 0 && e2 >= 0)
-                : (e0 <= 0 && e1 <= 0 && e2 <= 0);
+            const bool positiveInterior = area > 0;
+            const bool inside =
+                edgePassesTopLeft(e0, isTopLeftEdge(x0, y0, x1, y1, positiveInterior), positiveInterior) &&
+                edgePassesTopLeft(e1, isTopLeftEdge(x1, y1, x2, y2, positiveInterior), positiveInterior) &&
+                edgePassesTopLeft(e2, isTopLeftEdge(x2, y2, x0, y0, positiveInterior), positiveInterior);
             if (inside) {
                 const std::uint16_t color = (drawMode_ & (1u << 9)) != 0
                     ? ditheredColor24To15(rgb, px, py)
@@ -557,7 +576,12 @@ void Gpu::drawTexturedTriangle(const int x[3], const int y[3],
         long long w0=edgeFunction(x[1],y[1],x[2],y[2],px,py);
         long long w1=edgeFunction(x[2],y[2],x[0],y[0],px,py);
         long long w2=edgeFunction(x[0],y[0],x[1],y[1],px,py);
-        if (area>0 ? (w0<0||w1<0||w2<0) : (w0>0||w1>0||w2>0)) continue;
+        const bool positiveInterior = area > 0;
+        const bool inside =
+            edgePassesTopLeft(w0, isTopLeftEdge(x[1], y[1], x[2], y[2], positiveInterior), positiveInterior) &&
+            edgePassesTopLeft(w1, isTopLeftEdge(x[2], y[2], x[0], y[0], positiveInterior), positiveInterior) &&
+            edgePassesTopLeft(w2, isTopLeftEdge(x[0], y[0], x[1], y[1], positiveInterior), positiveInterior);
+        if (!inside) continue;
         if (area<0) { w0=-w0; w1=-w1; w2=-w2; }
         const long long den=area>0?area:-area;
         int tu=static_cast<int>((w0*u[0]+w1*u[1]+w2*u[2])/den) & 0xFF;
@@ -689,8 +713,11 @@ void Gpu::drawGouraudTriangle(int x0, int y0, std::uint32_t c0,
             long long w2 = edgeFunction(x0, y0, x1, y1, px, py);
             long long w0 = edgeFunction(x1, y1, x2, y2, px, py);
             long long w1 = edgeFunction(x2, y2, x0, y0, px, py);
-            const bool inside = area > 0 ? (w0 >= 0 && w1 >= 0 && w2 >= 0)
-                                         : (w0 <= 0 && w1 <= 0 && w2 <= 0);
+            const bool positiveInterior = area > 0;
+            const bool inside =
+                edgePassesTopLeft(w0, isTopLeftEdge(x1, y1, x2, y2, positiveInterior), positiveInterior) &&
+                edgePassesTopLeft(w1, isTopLeftEdge(x2, y2, x0, y0, positiveInterior), positiveInterior) &&
+                edgePassesTopLeft(w2, isTopLeftEdge(x0, y0, x1, y1, positiveInterior), positiveInterior);
             if (!inside) continue;
             if (area < 0) { w0 = -w0; w1 = -w1; w2 = -w2; }
             const std::uint64_t denominator = static_cast<std::uint64_t>(area > 0 ? area : -area);
