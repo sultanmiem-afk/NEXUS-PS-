@@ -90,7 +90,9 @@ int main() {
     gpu.writeGp0(0x00FF0000u);
     gpu.writeGp0(400u | (420u << 16));
     assert(vram.readPixel(400u, 400u, pixel) && pixel == 0x001Fu);
-    assert(vram.readPixel(420u, 400u, pixel) && pixel == 0x03E0u);
+    // The right/top vertex lies on an excluded top-left-rule edge. Sample
+    // one pixel inside instead, where green remains the dominant channel.
+    assert(vram.readPixel(418u, 401u, pixel) && pixel == 0x0781u);
     assert(vram.readPixel(400u, 420u, pixel) && pixel == 0x7C00u);
     assert(vram.readPixel(405u, 405u, pixel) && pixel == 0x1CEFu);
 
@@ -760,6 +762,7 @@ int main() {
     assert(((st>>16)&1u)==1u && ((st>>17)&3u)==1u);
     gpu.writeGp1(0x10000007u);
     assert(gpu.readGp0()==2u);
+    assert(gpu.readGp0()==2u); // Internal-register read remains latched.
     gpu.writeGp0(0xE2001234u);
     gpu.writeGp1(0x10000002u);
     assert(gpu.readGp0()==0x1234u);
@@ -840,6 +843,149 @@ int main() {
     assert(frame[0] == 0xFFFF0000u);
     assert(frame[1] == 0xFF000000u);
     assert(!gpu.copyDisplayToRgba8888(frame.data(), 10u, frameWidth, frameHeight));
+
+    // GP0(1F) raises the GPU IRQ line; GP1(02) acknowledges the device latch.
+    gpu.reset();
+    gpu.writeGp0(0x1F000000u);
+    assert((gpu.readStatus() & (1u << 24)) != 0u);
+    gpu.writeGp1(0x02000000u);
+    assert((gpu.readStatus() & (1u << 24)) == 0u);
+
+    // GP1 command mirrors and internal-register read aliases behave identically.
+    gpu.writeGp1(0x43000001u); // GP1(43) mirrors GP1(03): display off.
+    assert((gpu.readStatus() & (1u << 23)) != 0u);
+    gpu.writeGp1(0x43000000u);
+    assert((gpu.readStatus() & (1u << 23)) == 0u);
+    gpu.writeGp0(0xE3001234u);
+    gpu.writeGp1(0x17000003u); // GP1(17) mirrors GP1(10), selector 3.
+    assert(gpu.readGp0() == 0x00001234u);
+
+    // Mask-bit check and force settings apply to CPU-to-VRAM image transfers.
+    gpu.reset();
+    vram.clear(0u);
+    vram.writePixel(50u, 50u, 0x8001u);
+    gpu.writeGp0(0xE6000002u); // Do not overwrite destination pixels with mask bit set.
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(50u | (50u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    gpu.writeGp0(0x00001234u);
+    assert(vram.readPixel(50u, 50u, pixel) && pixel == 0x8001u);
+    gpu.writeGp0(0xE6000001u); // Force mask bit 15 on newly written pixels.
+    gpu.writeGp0(0xA0000000u);
+    gpu.writeGp0(51u | (50u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    gpu.writeGp0(0x00001234u);
+    assert(vram.readPixel(51u, 50u, pixel) && pixel == 0x9234u);
+
+    // The same mask semantics apply to VRAM-to-VRAM copies.
+    vram.writePixel(60u, 60u, 0x1234u);
+    vram.writePixel(61u, 60u, 0x8000u);
+    gpu.writeGp0(0xE6000002u);
+    gpu.writeGp0(0x80000000u);
+    gpu.writeGp0(60u | (60u << 16u));
+    gpu.writeGp0(61u | (60u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(61u, 60u, pixel) && pixel == 0x8000u);
+    gpu.writeGp0(0xE6000001u);
+    gpu.writeGp0(0x80000000u);
+    gpu.writeGp0(60u | (60u << 16u));
+    gpu.writeGp0(62u | (60u << 16u));
+    gpu.writeGp0(1u | (1u << 16u));
+    assert(vram.readPixel(62u, 60u, pixel) && pixel == 0x9234u);
+
+    // Flat line primitives use the GPU dither matrix when enabled.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u);
+    gpu.writeGp0(0xE1000200u); // Enable dithering.
+    gpu.writeGp0(0x40000080u); // Flat line, red=128.
+    gpu.writeGp0(0u);
+    gpu.writeGp0(0u); // Zero-length line still draws exactly one pixel.
+    assert(vram.readPixel(0u, 0u, pixel) && pixel == 15u);
+
+    // Adjacent triangles in a quad must own a shared edge exactly once.
+    // Semi-transparency makes a double-covered diagonal immediately visible.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    vram.writePixel(110u, 110u, 10u);
+    gpu.writeGp0(0x2A000018u); // Semi-transparent flat quad, red=3.
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(120u | (100u << 16u));
+    gpu.writeGp0(100u | (120u << 16u));
+    gpu.writeGp0(120u | (120u << 16u));
+    assert(vram.readPixel(110u, 110u, pixel) && pixel == 6u);
+
+    // Semi-transparent flat polylines must not blend a shared vertex twice.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    vram.writePixel(110u, 200u, 10u);
+    gpu.writeGp0(0x4A000018u);
+    gpu.writeGp0(100u | (200u << 16u));
+    gpu.writeGp0(110u | (200u << 16u));
+    gpu.writeGp0(120u | (200u << 16u));
+    gpu.writeGp0(0x55555555u);
+    assert(vram.readPixel(110u, 200u, pixel) && pixel == 6u);
+
+    // Gouraud quads use the same top-left coverage rule.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    vram.writePixel(110u, 110u, 10u);
+    gpu.writeGp0(0x3A000018u);
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(120u | (100u << 16u));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(100u | (120u << 16u));
+    gpu.writeGp0(0x00000018u);
+    gpu.writeGp0(120u | (120u << 16u));
+    assert(vram.readPixel(110u, 110u, pixel) && pixel == 6u);
+
+    // PAL high-vertical-resolution display mode exposes all 512 scanlines.
+    gpu.reset();
+    gpu.writeGp1(0x03000000u);
+    gpu.writeGp1(0x0800000Cu); // PAL + 480-line interlaced mode.
+    assert(gpu.copyDisplayToRgba8888(frame.data(), frame.size(), frameWidth, frameHeight));
+    assert(frameWidth == 256u && frameHeight == 512u);
+
+    // Rasterizer winding regression: the same right triangle must cover
+    // identical local pixels when its vertex order is reversed.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    gpu.writeGp0(0x200000FFu);
+    gpu.writeGp0(100u | (100u << 16u));
+    gpu.writeGp0(120u | (100u << 16u));
+    gpu.writeGp0(100u | (120u << 16u));
+    gpu.writeGp0(0x200000FFu);
+    gpu.writeGp0(220u | (100u << 16u));
+    gpu.writeGp0(200u | (120u << 16u));
+    gpu.writeGp0(200u | (100u << 16u));
+    for (std::uint32_t y = 0; y <= 20u; ++y) {
+        for (std::uint32_t x = 0; x <= 20u; ++x) {
+            std::uint16_t forward = 0, reversed = 0;
+            assert(vram.readPixel(100u + x, 100u + y, forward));
+            assert(vram.readPixel(200u + x, 100u + y, reversed));
+            assert(forward == reversed);
+        }
+    }
+
+    // A zero-area triangle must not write pixels.
+    gpu.reset();
+    gpu.writeGp0(0xE3000000u);
+    gpu.writeGp0(0xE4000000u | 1023u | (511u << 10u));
+    vram.clear(0u);
+    gpu.writeGp0(0x200000FFu);
+    gpu.writeGp0(300u | (300u << 16u));
+    gpu.writeGp0(310u | (310u << 16u));
+    gpu.writeGp0(320u | (320u << 16u));
+    assert(vram.readPixel(310u, 310u, pixel) && pixel == 0u);
 
     return 0;
 }

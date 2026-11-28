@@ -22,6 +22,10 @@ public:
     constexpr std::uint32_t height() const noexcept { return kHeight; }
     constexpr std::size_t sizeBytes() const noexcept { return kSizeBytes; }
 
+    // Contiguous row-major pixel access for hot GPU rasterization/scanout loops.
+    std::uint16_t* data() noexcept { return pixels_.data(); }
+    const std::uint16_t* data() const noexcept { return pixels_.data(); }
+
     void clear(std::uint16_t color = 0) noexcept;
     bool readPixel(std::uint32_t x, std::uint32_t y,
                    std::uint16_t& color) const noexcept;

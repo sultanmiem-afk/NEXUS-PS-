@@ -82,6 +82,7 @@ private:
     std::uint64_t audioSamplePhase_ = 0;
     bool cdromIrqLinePrevious_ = false;
     bool dmaIrqLinePrevious_ = false;
+    bool gpuIrqLinePrevious_ = false;
 };
 
 } // namespace nexus::ps1
