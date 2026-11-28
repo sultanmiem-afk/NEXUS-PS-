@@ -499,6 +499,8 @@ int main() {
     assert(!system.gpu().irqPending());
     assert(system.memory().write32(InterruptController::kStatusAddress, ~(1u << 1)));
     assert((system.memory().interrupts().status() & (1u << 1)) == 0u);
+    // Let the system observe the deasserted GPU IRQ line before raising it again.
+    assert(system.step().cpu.status == CpuStepStatus::Executed);
     system.gpu().writeGp0(0x1F000000u);
     assert(system.step().cpu.status == CpuStepStatus::Executed);
     assert((system.memory().interrupts().status() & (1u << 1)) != 0u);
