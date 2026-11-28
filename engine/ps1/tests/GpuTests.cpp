@@ -90,7 +90,9 @@ int main() {
     gpu.writeGp0(0x00FF0000u);
     gpu.writeGp0(400u | (420u << 16));
     assert(vram.readPixel(400u, 400u, pixel) && pixel == 0x001Fu);
-    assert(vram.readPixel(420u, 400u, pixel) && pixel == 0x03E0u);
+    // The right/top vertex lies on an excluded top-left-rule edge. Sample
+    // one pixel inside instead, where green remains the dominant channel.
+    assert(vram.readPixel(418u, 401u, pixel) && pixel == 0x0781u);
     assert(vram.readPixel(400u, 420u, pixel) && pixel == 0x7C00u);
     assert(vram.readPixel(405u, 405u, pixel) && pixel == 0x1CEFu);
 
